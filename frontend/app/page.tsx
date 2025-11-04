@@ -1353,7 +1353,7 @@ export default function Home() {
 
   // Initialize month_nav from project periode if not set
   useEffect(() => {
-    if (projectInfo && !settingsLoading && !hasInitializedMonth && (!monthNav || monthNav === dayjs().format("YYYYMM"))) {
+    if (projectInfo && !hasInitializedMonth && (!monthNav || monthNav === dayjs().format("YYYYMM"))) {
       const periode = projectInfo.periode;
       if (periode) {
         // Try to parse periode like "Desember 2024", "Q1 2025", "Januar 2025", etc.
@@ -1364,7 +1364,7 @@ export default function Home() {
       }
       setHasInitializedMonth(true);
     }
-  }, [projectInfo, monthNav, settingsLoading, hasInitializedMonth, updateSettings]);
+  }, [projectInfo, monthNav, hasInitializedMonth, updateSettings]);
 
   // Helper to parse periode text to YYYYMM format
   function parsePeriodeToYYYYMM(periode: string): string | null {
