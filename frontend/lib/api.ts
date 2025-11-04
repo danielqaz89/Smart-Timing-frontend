@@ -183,6 +183,9 @@ export type UserSettings = {
   webhook_url: string | null;
   sheet_url: string | null;
   month_nav: string | null;
+  invoice_reminder_active?: boolean;
+  theme_mode?: 'light' | 'dark';
+  view_mode?: 'week' | 'month';
   created_at?: string;
   updated_at?: string;
 };
