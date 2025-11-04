@@ -1030,31 +1030,6 @@ export default function Home() {
     }
   };
 
-  // Detect active stamp (today's entry with same start/end time)
-  const activeStamp = useMemo(() => {
-    const today = dayjs().format("YYYY-MM-DD");
-    return logs.find(l => l.date === today && l.start_time === l.end_time);
-  }, [logs]);
-
-  // Timer for active stamp
-  const [elapsedTime, setElapsedTime] = useState("00:00:00");
-  useEffect(() => {
-    if (!activeStamp) {
-      setElapsedTime("00:00:00");
-      return;
-    }
-    const interval = setInterval(() => {
-      const start = dayjs(`${activeStamp.date} ${activeStamp.start_time}`);
-      const now = dayjs();
-      const diff = now.diff(start, 'second');
-      const hours = Math.floor(diff / 3600);
-      const minutes = Math.floor((diff % 3600) / 60);
-      const seconds = diff % 60;
-      setElapsedTime(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [activeStamp]);
-
   // Settings from database with fallbacks
   const rate = settings?.hourly_rate || 0;
   const [rateInput, setRateInput] = useState<string>("");
@@ -1102,6 +1077,32 @@ export default function Home() {
     
     return filtered;
   }, [allLogs, searchQuery, viewMode]);
+  
+  // Detect active stamp (today's entry with same start/end time)
+  const activeStamp = useMemo(() => {
+    const today = dayjs().format("YYYY-MM-DD");
+    return logs.find(l => l.date === today && l.start_time === l.end_time);
+  }, [logs]);
+
+  // Timer for active stamp
+  const [elapsedTime, setElapsedTime] = useState("00:00:00");
+  useEffect(() => {
+    if (!activeStamp) {
+      setElapsedTime("00:00:00");
+      return;
+    }
+    const interval = setInterval(() => {
+      const start = dayjs(`${activeStamp.date} ${activeStamp.start_time}`);
+      const now = dayjs();
+      const diff = now.diff(start, 'second');
+      const hours = Math.floor(diff / 3600);
+      const minutes = Math.floor((diff % 3600) / 60);
+      const seconds = diff % 60;
+      setElapsedTime(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeStamp]);
+  
   const totalHours = useMemo(() => {
     return logs.reduce((sum, r) => {
       const d = dayjs(r.date);
