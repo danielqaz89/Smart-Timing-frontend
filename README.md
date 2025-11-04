@@ -1,8 +1,27 @@
-# Smart-Timing Backend
-Node.js v22.16.0 · npm 10.x  
-Deploy on **Render**
+# Smart Timing Frontend
 
-1. Root Directory → `backend`
-2. Build Command → `npm install`
-3. Start Command → `node server.js`
-4. Add env var: `DATABASE_URL` (already in .env locally)
+Next.js frontend application for Smart Timing time tracking system.
+
+## Setup
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Visit http://localhost:3000
+
+## Environment Variables
+
+Create `frontend/.env.local`:
+
+```
+NEXT_PUBLIC_API_BASE=http://localhost:4000
+```
+
+## Deployment
+
+Deployed on Vercel with root directory set to `frontend/`
+
+Backend repository: https://github.com/danielqaz89/Smart-Timing
