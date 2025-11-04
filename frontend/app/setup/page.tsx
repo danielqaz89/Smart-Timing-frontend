@@ -234,7 +234,7 @@ export default function Setup() {
               required
               aria-label="Oppdragsgiver navn"
             />
-            <Autocomplete
+            <Autocomplete<{ label: string; icon: JSX.Element } | string, false, false, true>
               freeSolo
               options={[
                 { label: 'Miljøarbeider', icon: <GroupIcon /> },
