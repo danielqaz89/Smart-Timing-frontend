@@ -194,15 +194,18 @@ async function saveCompany() {
     );
   }
 
-return (
+  // Update browser tab title dynamically
+  useEffect(() => {
+    document.title = (tab === 0 ? 'Kom i gang som konsulent' : 'Forespør bedriftstilgang') + ' - Smart Timing';
+  }, [tab]);
+
+  return (
     <Container maxWidth="sm" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
       <Card sx={{ width: '100%', bgcolor: 'rgba(13,17,23,0.7)', backdropFilter: 'blur(8px)', borderRadius: 3 }}>
-        <CardHeader 
-          title={
-            <Typography variant="h5" align="center">
-              Oppsett
-            </Typography>
-          } 
+        <CardHeader
+          sx={{ textAlign: 'center' }}
+          title={tab === 0 ? 'Kom i gang som konsulent' : 'Forespør bedriftstilgang'}
+          subheader={tab === 0 ? 'Fyll ut prosjektinformasjon for å komme i gang.' : 'Oppgi org.nr så henter vi bedriftsinfo (BRREG), og send forespørsel.'}
         />
         <CardContent>
           <Tabs value={tab} onChange={(_, v) => setTab(v)} centered sx={{ mb: 2 }}>
@@ -385,7 +388,10 @@ return (
               <TextField
                 label="Organisasjonsnummer"
                 value={companyForm.orgnr}
-                onChange={(e) => setCompanyForm({ ...companyForm, orgnr: e.target.value })}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '').slice(0, 9);
+                  setCompanyForm({ ...companyForm, orgnr: digits });
+                }}
                 onBlur={async () => {
                   const c = companyForm.orgnr.replace(/\s/g, '');
                   if (/^\d{9}$/.test(c)) {
@@ -404,7 +410,11 @@ return (
                 placeholder="9 siffer"
                 fullWidth
                 required
-                helperText="Skriv org.nr og gå ut av feltet for å hente fra BRREG"
+                inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', maxLength: 9 }}
+                error={companyForm.orgnr.length > 0 && companyForm.orgnr.length !== 9}
+                helperText={companyForm.orgnr.length > 0 && companyForm.orgnr.length !== 9 
+                  ? 'Org.nr må være 9 siffer'
+                  : 'Skriv org.nr og gå ut av feltet for å hente fra Brønnøysundregistrene'}
               />
 
               <Autocomplete
@@ -497,7 +507,7 @@ return (
                 {saving ? <CircularProgress size={24} /> : 'Send forespørsel'}
               </Button>
               <Typography variant="caption" color="text.secondary">
-                Forespørselen sendes til admin for godkjenning.
+                Forespørselen sendes til Smart Timing.
               </Typography>
             </Stack>
           )}
