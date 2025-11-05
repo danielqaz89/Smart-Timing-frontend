@@ -43,8 +43,11 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import SaveIcon from "@mui/icons-material/Save";
 import CloseIcon from "@mui/icons-material/Close";
+import ArchiveIcon from "@mui/icons-material/Archive";
+import UnarchiveIcon from "@mui/icons-material/Unarchive";
+import Inventory2Icon from "@mui/icons-material/Inventory2";
 import dayjs from "dayjs";
-import { API_BASE, createLog, deleteLog, fetchLogs, createLogsBulk, webhookTestRelay, deleteLogsMonth, deleteLogsAll, updateLog, sendTimesheet, sendTimesheetViaGmail, getGoogleAuthStatus, generateMonthlyReport, type LogRow } from "../lib/api";
+import { API_BASE, createLog, deleteLog, fetchLogs, createLogsBulk, webhookTestRelay, deleteLogsMonth, deleteLogsAll, updateLog, sendTimesheet, sendTimesheetViaGmail, getGoogleAuthStatus, generateMonthlyReport, archiveLog, unarchiveLog, archiveLogsByMonth, type LogRow } from "../lib/api";
 import { exportToPDF } from "../lib/pdfExport";
 import { useThemeMode } from "../components/ThemeRegistry";
 import Brightness4Icon from "@mui/icons-material/Brightness4";
@@ -1011,6 +1014,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkMode, setBulkMode] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [viewMode, setViewMode] = useState<'month' | 'week'>(settings?.view_mode || 'month');
   
   // Sync view mode from settings
@@ -1044,7 +1048,7 @@ export default function Home() {
   };
   const { data, isLoading, isValidating, mutate, size, setSize } = useSWRInfinite(
     getKey,
-    ([, m]) => fetchLogs(m),
+    ([, m]) => fetchLogs(m, showArchived),
     { revalidateOnFocus: false }
   );
   const allLogs: LogRow[] = (data || []).flat();
@@ -1145,6 +1149,37 @@ export default function Home() {
     setQuickNotes("");
     await mutate();
     showToast("Stempling registrert");
+  }
+
+  // Archive handlers
+  async function handleArchive(row: LogRow) {
+    try {
+      await archiveLog(row.id);
+      await mutate();
+      showToast("Logg arkivert");
+    } catch (e: any) {
+      showToast(`Arkivering feilet: ${e?.message || e}`, "error");
+    }
+  }
+
+  async function handleUnarchive(row: LogRow) {
+    try {
+      await unarchiveLog(row.id);
+      await mutate();
+      showToast("Logg gjenopprettet");
+    } catch (e: any) {
+      showToast(`Gjenoppretting feilet: ${e?.message || e}`, "error");
+    }
+  }
+
+  async function handleArchiveMonth() {
+    try {
+      await archiveLogsByMonth(monthNav);
+      await mutate();
+      showToast(`Alle logger for ${formatMonthLabel(monthNav)} arkivert`, "success");
+    } catch (e: any) {
+      showToast(`Arkivering feilet: ${e?.message || e}`, "error");
+    }
   }
 
   // Quick stamp from FAB
@@ -1796,6 +1831,7 @@ export default function Home() {
                 </Stack>
                 <Divider />
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                  <Button variant="outlined" color="info" startIcon={<Inventory2Icon />} onClick={handleArchiveMonth}>Arkiver denne måneden</Button>
                   <Button variant="outlined" color="warning" onClick={async () => { await deleteLogsMonth(dayjs().format("YYYYMM")); showToast("Denne måneden nullstilt", "success"); await mutate(); }}>Nullstill denne måneden</Button>
                   <Button variant="outlined" color="error" onClick={async () => { if (confirm("Sikker på at du vil slette hele datasettet?")) { await deleteLogsAll(); showToast("Hele datasettet er nullstilt", "success"); await mutate(); } }}>Nullstill hele datasettet</Button>
                 </Stack>
@@ -1861,7 +1897,16 @@ export default function Home() {
           <CardHeader 
             title={`Logg for ${formatMonthLabel(monthNav)}`}
             action={
-              <Stack direction="row" spacing={1}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Stack direction="row" spacing={0.5} alignItems="center">
+                  <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>Vis arkiverte</Typography>
+                  <input 
+                    type="checkbox" 
+                    checked={showArchived} 
+                    onChange={(e) => setShowArchived(e.target.checked)}
+                    style={{ cursor: 'pointer', width: 18, height: 18 }}
+                  />
+                </Stack>
                 {bulkMode && selectedIds.size > 0 && (
                   <Button 
                     variant="contained" 
@@ -1983,6 +2028,15 @@ export default function Home() {
                               <TableCell align="right">{r.expense_coverage ? `${Number(r.expense_coverage).toLocaleString('no-NO')} kr` : '—'}</TableCell>
                               <TableCell align="right">
                                 <IconButton aria-label="Rediger rad" size="small" onClick={() => startEdit(r)}><EditIcon fontSize="small" /></IconButton>
+                                {r.is_archived ? (
+                                  <IconButton aria-label="Gjenopprett fra arkiv" size="small" onClick={() => handleUnarchive(r)}>
+                                    <UnarchiveIcon fontSize="small" />
+                                  </IconButton>
+                                ) : (
+                                  <IconButton aria-label="Arkiver rad" size="small" onClick={() => handleArchive(r)}>
+                                    <ArchiveIcon fontSize="small" />
+                                  </IconButton>
+                                )}
                                 <IconButton aria-label="Slett rad" size="small" onClick={() => handleDelete(r)}>
                                   <DeleteIcon fontSize="small" />
                                 </IconButton>

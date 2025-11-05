@@ -13,10 +13,15 @@ export type LogRow = {
   notes: string | null;
   expense_coverage: number;
   created_at: string;
+  is_archived?: boolean;
+  archived_at?: string | null;
 };
 
-export async function fetchLogs(month?: string): Promise<LogRow[]> {
-  const qs = month ? `?month=${month}` : "";
+export async function fetchLogs(month?: string, archived = false): Promise<LogRow[]> {
+  const params = new URLSearchParams();
+  if (month) params.append('month', month);
+  params.append('archived', String(archived));
+  const qs = params.toString() ? `?${params.toString()}` : '';
   const res = await fetch(`${API_BASE}/api/logs${qs}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to load logs");
   return res.json();
@@ -109,6 +114,28 @@ export async function deleteLogsMonth(yyyymm: string) {
 export async function deleteLogsAll() {
   const res = await fetch(`${API_BASE}/api/logs?all=1`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete all");
+  return res.json();
+}
+
+export async function archiveLog(id: string) {
+  const res = await fetch(`${API_BASE}/api/logs/${id}/archive`, { method: "PATCH" });
+  if (!res.ok) throw new Error("Failed to archive log");
+  return res.json();
+}
+
+export async function unarchiveLog(id: string) {
+  const res = await fetch(`${API_BASE}/api/logs/${id}/unarchive`, { method: "PATCH" });
+  if (!res.ok) throw new Error("Failed to unarchive log");
+  return res.json();
+}
+
+export async function archiveLogsByMonth(month: string) {
+  const res = await fetch(`${API_BASE}/api/logs/archive-month`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ month }),
+  });
+  if (!res.ok) throw new Error("Failed to archive month");
   return res.json();
 }
 
