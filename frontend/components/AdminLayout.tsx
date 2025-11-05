@@ -27,6 +27,7 @@ import {
   ExitToApp as LogoutIcon,
   AdminPanelSettings as AdminIcon,
   History as HistoryIcon,
+  Business as BusinessIcon,
 } from '@mui/icons-material';
 import { useAdmin } from '../contexts/AdminContext';
 
@@ -35,6 +36,7 @@ const DRAWER_WIDTH = 240;
 const menuItems = [
   { label: 'Dashboard', path: '/admin/dashboard', icon: <DashboardIcon /> },
   { label: 'Users', path: '/admin/users', icon: <PeopleIcon /> },
+  { label: 'Companies', path: '/admin/companies', icon: <BusinessIcon /> },
   { label: 'Analytics', path: '/admin/analytics', icon: <AnalyticsIcon /> },
   { label: 'Audit Log', path: '/admin/audit', icon: <HistoryIcon /> },
   { label: 'Settings', path: '/admin/settings', icon: <SettingsIcon /> },

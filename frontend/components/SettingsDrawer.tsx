@@ -30,6 +30,7 @@ import { useUserSettings } from "../lib/hooks";
 import { useSnackbar } from "notistack";
 import GoogleSheetsPicker from "./GoogleSheetsPicker";
 import { getGoogleAuthStatus, initiateGoogleAuth, disconnectGoogleAccount } from "../lib/api";
+import { useAuth } from "../contexts/AuthContext";
 
 // Locale-safe helpers for Timesats input (Norwegian)
 const nbFormatter = new Intl.NumberFormat('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -127,6 +128,8 @@ export default function SettingsDrawer() {
       setSaving(false);
     }
   }
+
+  const { user, isAuthenticated, logout } = useAuth();
 
   return (
     <>
@@ -316,6 +319,39 @@ export default function SettingsDrawer() {
                 </AccordionDetails>
               </Accordion>
 
+              {/* Account */}
+              <Accordion>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="h6">👤 Konto</Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Stack spacing={2}>
+                    {isAuthenticated ? (
+                      <>
+                        <Typography variant="body2">
+                          Innlogget som: <strong>{user?.email}</strong>
+                        </Typography>
+                        <Button variant="outlined" color="error" onClick={logout}>
+                          Logg ut av Smart Timing
+                        </Button>
+                        <Typography variant="caption" color="text.secondary">
+                          Dette logger deg ut av Smart Timing (ikke Google-tilkoblingen for integrasjoner).
+                        </Typography>
+                      </>
+                    ) : (
+                      <>
+                        <Typography variant="body2" color="text.secondary">
+                          Du er ikke innlogget. Fortsett uten innlogging, eller logg inn for en personlig opplevelse.
+                        </Typography>
+                        <Button variant="contained" onClick={() => (window.location.href = '/login')}>
+                          Logg inn
+                        </Button>
+                      </>
+                    )}
+                  </Stack>
+                </AccordionDetails>
+              </Accordion>
+
               {/* Google OAuth Connection */}
               <Accordion>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -389,6 +425,47 @@ export default function SettingsDrawer() {
                         </Typography>
                       </>
                     )}
+                  </Stack>
+                </AccordionDetails>
+              </Accordion>
+
+              {/* System Status */}
+              <Accordion>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="h6">🩺 Systemstatus</Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Stack spacing={2}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'}/api/health`);
+                          const data = await res.json();
+                          enqueueSnackbar(`Status: ${data.status} • DB: ${data.database} • Uptime: ${data.uptime_seconds}s`, { variant: data.status === 'healthy' ? 'success' : 'error' });
+                        } catch (e: any) {
+                          enqueueSnackbar(`Kunne ikke hente status: ${e?.message || e}`, { variant: 'error' });
+                        }
+                      }}
+                    >
+                      Sjekk helse
+                    </Button>
+                    <Button
+                      variant="text"
+                      size="small"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'}/api/test`);
+                          const data = await res.json();
+                          enqueueSnackbar(`Test: ${data.message || 'OK'}`, { variant: 'info' });
+                        } catch (e: any) {
+                          enqueueSnackbar(`Test feilet: ${e?.message || e}`, { variant: 'error' });
+                        }
+                      }}
+                    >
+                      Kjør test-endepunkt
+                    </Button>
                   </Stack>
                 </AccordionDetails>
               </Accordion>
