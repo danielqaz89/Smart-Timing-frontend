@@ -35,8 +35,13 @@ import {
   FormGroup,
   FormControlLabel,
   Skeleton,
+  Menu,
+  MenuItem as MuiMenuItem,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { useSnackbar } from "notistack";
+const ActionsMenuItem = MuiMenuItem;
 import SettingsDrawer from "../components/SettingsDrawer";
 import MigrationBanner from "../components/MigrationBanner";
 import MobileBottomNav from "../components/MobileBottomNav";
@@ -51,6 +56,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import ArchiveIcon from "@mui/icons-material/Archive";
 import UnarchiveIcon from "@mui/icons-material/Unarchive";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import dayjs from "dayjs";
 import { API_BASE, createLog, deleteLog, fetchLogs, createLogsBulk, webhookTestRelay, deleteLogsMonth, deleteLogsAll, updateLog, sendTimesheet, sendTimesheetViaGmail, getGoogleAuthStatus, initiateGoogleAuth, generateMonthlyReport, archiveLog, unarchiveLog, archiveLogsByMonth, syncToGoogleSheets, exportUserData, deleteUserAccount, type LogRow } from "../lib/api";
 import { exportToPDF } from "../lib/pdfExport";
@@ -1294,6 +1300,12 @@ export default function Home() {
     }
   }
 
+  // Row action menu (mobile)
+  const [actionAnchor, setActionAnchor] = useState<null | HTMLElement>(null);
+  const [actionRow, setActionRow] = useState<LogRow | null>(null);
+  const openActions = (e: React.MouseEvent<HTMLElement>, row: LogRow) => { setActionAnchor(e.currentTarget); setActionRow(row); };
+  const closeActions = () => { setActionAnchor(null); setActionRow(null); };
+
   async function handleUnarchive(row: LogRow) {
     try {
       await unarchiveLog(row.id);
@@ -1453,6 +1465,11 @@ export default function Home() {
   }
 
   const parentRef = useMemo(() => ({ current: null as any }), []);
+
+  // Responsive helpers
+  const theme = useTheme();
+  const isMdDown = useMediaQuery(theme.breakpoints.down('md'));
+
   function weekdayShort(dateStr: string) {
     if (!dateStr) return '';
     const d = dayjs(dateStr).day();
@@ -2100,18 +2117,18 @@ export default function Home() {
                 <TableHead sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: 'background.paper' }}>
                 <TableRow>
                   {bulkMode && <TableCell padding="checkbox" />}
-                  <TableCell>Dag</TableCell>
-                  <TableCell>Dato</TableCell>
-                  <TableCell>Inn</TableCell>
-                  <TableCell>Ut</TableCell>
-                  <TableCell>Pause</TableCell>
-                  <TableCell>Aktivitet</TableCell>
-                  <TableCell>Tittel</TableCell>
-                  <TableCell>Prosjekt</TableCell>
-                  <TableCell>Sted</TableCell>
-                  <TableCell>Notater</TableCell>
-                  <TableCell align="right">Utgifter</TableCell>
-                  <TableCell align="right">Handlinger</TableCell>
+                  <TableCell sx={{ width: 64 }}>Dag</TableCell>
+                  <TableCell sx={{ width: 80 }}>Dato</TableCell>
+                  <TableCell sx={{ width: 84 }}>Inn</TableCell>
+                  <TableCell sx={{ width: 84 }}>Ut</TableCell>
+                  <TableCell sx={{ width: 72 }}>Pause</TableCell>
+                  <TableCell sx={{ width: 100 }}>Aktivitet</TableCell>
+                  <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Tittel</TableCell>
+                  <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Prosjekt</TableCell>
+                  <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Sted</TableCell>
+                  <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Notater</TableCell>
+                  <TableCell align="right" sx={{ width: 80 }}>Utgifter</TableCell>
+                  <TableCell align="right" sx={{ width: { xs: 56, md: 140 } }}>Handlinger</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -2136,9 +2153,9 @@ export default function Home() {
                               {bulkMode && <TableCell />}
                               <TableCell>{weekdayShort(editForm.date)}</TableCell>
                               <TableCell><TextField type="date" value={editForm.date} onChange={(e)=>setEditForm({...editForm, date: e.target.value})} size="small" /></TableCell>
-                              <TableCell><TextField type="time" value={editForm.start} onChange={(e)=>setEditForm({...editForm, start: e.target.value})} size="small" /></TableCell>
-                              <TableCell><TextField type="time" value={editForm.end} onChange={(e)=>setEditForm({...editForm, end: e.target.value})} size="small" /></TableCell>
-                              <TableCell><TextField type="number" value={editForm.breakHours} onChange={(e)=>setEditForm({...editForm, breakHours: Number(e.target.value)})} size="small" /></TableCell>
+                              <TableCell><TextField type="time" value={editForm.start} onChange={(e)=>setEditForm({...editForm, start: e.target.value})} size="small" sx={{ maxWidth: 96 }} /></TableCell>
+                              <TableCell><TextField type="time" value={editForm.end} onChange={(e)=>setEditForm({...editForm, end: e.target.value})} size="small" sx={{ maxWidth: 96 }} /></TableCell>
+                              <TableCell><TextField type="number" value={editForm.breakHours} onChange={(e)=>setEditForm({...editForm, breakHours: Number(e.target.value)})} size="small" sx={{ maxWidth: 96 }} /></TableCell>
                               <TableCell>
                                 <FormControl size="small" fullWidth>
                                   <Select value={editForm.activity} onChange={(e)=>setEditForm({...editForm, activity: e.target.value})}>
@@ -2147,11 +2164,11 @@ export default function Home() {
                                   </Select>
                                 </FormControl>
                               </TableCell>
-                              <TableCell><TextField value={editForm.title} onChange={(e)=>setEditForm({...editForm, title: e.target.value})} size="small" /></TableCell>
-                              <TableCell><TextField value={editForm.project} onChange={(e)=>setEditForm({...editForm, project: e.target.value})} size="small" /></TableCell>
-                              <TableCell><TextField value={editForm.place} onChange={(e)=>setEditForm({...editForm, place: e.target.value})} size="small" /></TableCell>
-                              <TableCell><TextField value={editForm.notes} onChange={(e)=>setEditForm({...editForm, notes: e.target.value})} size="small" /></TableCell>
-                              <TableCell align="right"><TextField type="number" value={editForm.expenseCoverage} onChange={(e)=>setEditForm({...editForm, expenseCoverage: Number(e.target.value)||0})} size="small" InputProps={{inputProps:{min:0}}} /></TableCell>
+                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}><TextField value={editForm.title} onChange={(e)=>setEditForm({...editForm, title: e.target.value})} size="small" /></TableCell>
+                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}><TextField value={editForm.project} onChange={(e)=>setEditForm({...editForm, project: e.target.value})} size="small" /></TableCell>
+                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}><TextField value={editForm.place} onChange={(e)=>setEditForm({...editForm, place: e.target.value})} size="small" /></TableCell>
+                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}><TextField value={editForm.notes} onChange={(e)=>setEditForm({...editForm, notes: e.target.value})} size="small" /></TableCell>
+                              <TableCell align="right"><TextField type="number" value={editForm.expenseCoverage} onChange={(e)=>setEditForm({...editForm, expenseCoverage: Number(e.target.value)||0})} size="small" InputProps={{inputProps:{min:0}}} sx={{ maxWidth: 110 }} /></TableCell>
                               <TableCell align="right">
                                 <IconButton aria-label="Lagre endringer" size="small" onClick={() => saveEdit(r.id, r)}><SaveIcon fontSize="small" /></IconButton>
                                 <IconButton aria-label="Avbryt redigering" size="small" onClick={() => cancelEdit()}><CloseIcon fontSize="small" /></IconButton>
@@ -2167,33 +2184,41 @@ export default function Home() {
                               <TableCell>
                                 <Chip label={r.activity === 'Work' ? 'Arbeid' : 'Møte'} size="small" color={r.activity === 'Work' ? 'primary' : 'secondary'} />
                               </TableCell>
-                              <TableCell>
+                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}>
                                 <Typography noWrap title={r.title || ''}>{r.title}</Typography>
                               </TableCell>
-                              <TableCell>
+                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}>
                                 <Typography noWrap title={r.project || ''}>{r.project}</Typography>
                               </TableCell>
-                              <TableCell>
+                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}>
                                 <Typography noWrap title={r.place || ''}>{r.place}</Typography>
                               </TableCell>
-                              <TableCell>
+                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}>
                                 <Typography noWrap title={r.notes || ''}>{r.notes}</Typography>
                               </TableCell>
                               <TableCell align="right">{r.expense_coverage ? `${Number(r.expense_coverage).toLocaleString('no-NO')} kr` : '—'}</TableCell>
                               <TableCell align="right">
-                                <IconButton aria-label="Rediger rad" size="small" onClick={() => startEdit(r)}><EditIcon fontSize="small" /></IconButton>
-                                {r.is_archived ? (
-                                  <IconButton aria-label="Gjenopprett fra arkiv" size="small" onClick={() => handleUnarchive(r)}>
-                                    <UnarchiveIcon fontSize="small" />
+                                {isMdDown ? (
+                                  <IconButton aria-label="Mer" size="small" onClick={(e) => openActions(e, r)}>
+                                    <MoreVertIcon fontSize="small" />
                                   </IconButton>
                                 ) : (
-                                  <IconButton aria-label="Arkiver rad" size="small" onClick={() => handleArchive(r)}>
-                                    <ArchiveIcon fontSize="small" />
-                                  </IconButton>
+                                  <>
+                                    <IconButton aria-label="Rediger rad" size="small" onClick={() => startEdit(r)}><EditIcon fontSize="small" /></IconButton>
+                                    {r.is_archived ? (
+                                      <IconButton aria-label="Gjenopprett fra arkiv" size="small" onClick={() => handleUnarchive(r)}>
+                                        <UnarchiveIcon fontSize="small" />
+                                      </IconButton>
+                                    ) : (
+                                      <IconButton aria-label="Arkiver rad" size="small" onClick={() => handleArchive(r)}>
+                                        <ArchiveIcon fontSize="small" />
+                                      </IconButton>
+                                    )}
+                                    <IconButton aria-label="Slett rad" size="small" onClick={() => handleDelete(r)}>
+                                      <DeleteIcon fontSize="small" />
+                                    </IconButton>
+                                  </>
                                 )}
-                                <IconButton aria-label="Slett rad" size="small" onClick={() => handleDelete(r)}>
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
                               </TableCell>
                             </>
                           )}
@@ -2215,6 +2240,19 @@ export default function Home() {
           </CardContent>
         </Card>
       </Box>
+
+      {/* Actions Menu (mobile) */}
+      <Menu anchorEl={actionAnchor} open={Boolean(actionAnchor)} onClose={closeActions} keepMounted>
+        <ActionsMenuItem onClick={() => { if (actionRow) startEdit(actionRow); closeActions(); }}>Rediger</ActionsMenuItem>
+        {actionRow?.is_archived ? (
+          <ActionsMenuItem onClick={async () => { if (actionRow) await handleUnarchive(actionRow); closeActions(); }}>Gjenopprett</ActionsMenuItem>
+        ) : (
+          <ActionsMenuItem onClick={async () => { if (actionRow) await handleArchive(actionRow); closeActions(); }}>Arkiver</ActionsMenuItem>
+        )}
+        <ActionsMenuItem onClick={async () => { if (actionRow) await handleDelete(actionRow); closeActions(); }}>
+          Slett
+        </ActionsMenuItem>
+      </Menu>
 
       {/* Mobile Bottom Navigation - Hidden on desktop */}
       <MobileBottomNav
