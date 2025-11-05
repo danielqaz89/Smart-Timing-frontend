@@ -57,6 +57,7 @@ import ArchiveIcon from "@mui/icons-material/Archive";
 import UnarchiveIcon from "@mui/icons-material/Unarchive";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import BarChartIcon from "@mui/icons-material/BarChart";
 import dayjs from "dayjs";
 import { API_BASE, createLog, deleteLog, fetchLogs, createLogsBulk, webhookTestRelay, deleteLogsMonth, deleteLogsAll, updateLog, sendTimesheet, sendTimesheetViaGmail, getGoogleAuthStatus, initiateGoogleAuth, generateMonthlyReport, archiveLog, unarchiveLog, archiveLogsByMonth, syncToGoogleSheets, exportUserData, deleteUserAccount, type LogRow } from "../lib/api";
 import { exportToPDF } from "../lib/pdfExport";
@@ -990,6 +991,7 @@ export default function Home() {
   const [mobileDialogOpen, setMobileDialogOpen] = useState(false);
   const [mobileDialogContent, setMobileDialogContent] = useState<"stamp-work" | "stamp-meeting" | "manual-entry" | "import" | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
 
   // Onboarding
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -1698,6 +1700,16 @@ export default function Home() {
           <Button 
             variant="outlined" 
             size="small"
+            startIcon={<BarChartIcon fontSize="small" />}
+            aria-label="Åpne nøkkeltall"
+            title="Månedsfilter og nøkkeltall"
+            onClick={() => setStatsOpen(true)}
+          >
+            Nøkkeltall
+          </Button>
+          <Button 
+            variant="outlined" 
+            size="small"
             aria-label="Åpne avanserte verktøy"
             title="Avanserte verktøy"
             onClick={() => setAdvancedOpen(true)}
@@ -1827,155 +1839,126 @@ export default function Home() {
         </Grid>
       </Grid>
 
-      {/* Månedsfilter og nøkkeltall */}
-      <Grid container spacing={2} justifyContent="center" sx={{ mt: 2 }}>
-        <Grid item xs={12} md={8} lg={6} ref={statsRef}>
-          <Card>
-            <CardHeader title="Månedsfilter og nøkkeltall" />
-            <CardContent>
-              <Stack spacing={2}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Button size="small" onClick={() => { const next = dayjs(monthNavLocal+"01").subtract(1, "month").format("YYYYMM"); setMonthNavLocal(next); updateSettings({ month_nav: next }); }}>{"<"}</Button>
-                  <TextField 
-                    type="month"
-                    label="Måned"
-                    InputLabelProps={{ shrink: true }}
-                    value={dayjs(monthNavLocal + '01').format('YYYY-MM')}
-                    onChange={(e) => {
-                      const val = (e.target.value || '').replace(/[^0-9-]/g, '');
-                      const yyyymm = val.replace('-', '').slice(0,6);
-                      if (yyyymm.length === 6) { setMonthNavLocal(yyyymm); updateSettings({ month_nav: yyyymm }); }
-                    }}
-                  />
-                  <Button size="small" onClick={() => { const next = dayjs(monthNavLocal+"01").add(1, "month").format("YYYYMM"); setMonthNavLocal(next); updateSettings({ month_nav: next }); }}>{">"}</Button>
-                </Stack>
-                <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
-                  <Chip 
-                    label="Uke"
-                    size="small" 
-                    onClick={() => updateViewMode('week')}
-                    color={viewMode === 'week' ? "primary" : "default"}
-                    variant={viewMode === 'week' ? "filled" : "outlined"}
-                  />
-                  <Chip 
-                    label="Måned"
-                    size="small" 
-                    onClick={() => updateViewMode('month')}
-                    color={viewMode === 'month' ? "primary" : "default"}
-                    variant={viewMode === 'month' ? "filled" : "outlined"}
-                  />
-                  <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
-                  <Chip 
-                    label="Denne måneden" 
-                    size="small" 
-                    onClick={() => { updateViewMode('month'); const cur = dayjs().format("YYYYMM"); setMonthNavLocal(cur); updateSettings({month_nav: cur}); }}
-                    color={monthNavLocal === dayjs().format("YYYYMM") ? "primary" : "default"}
-                  />
-                  <Chip 
-                    label="Forrige måned" 
-                    size="small" 
-                    onClick={() => { updateViewMode('month'); const prev = dayjs().subtract(1, "month").format("YYYYMM"); setMonthNavLocal(prev); updateSettings({month_nav: prev}); }}
-                    color={monthNavLocal === dayjs().subtract(1, "month").format("YYYYMM") ? "primary" : "default"}
-                  />
-                  <Chip 
-                    label="Dette året" 
-                    size="small" 
-                    onClick={() => { updateViewMode('month'); const start = dayjs().startOf("year").format("YYYYMM"); setMonthNavLocal(start); updateSettings({month_nav: start}); }}
-                  />
-                </Stack>
-                <Divider />
-                <Typography variant="body2">Totale timer (man–fre)</Typography>
-                <Typography variant="h4">{totalHours.toFixed(2)}</Typography>
-                <Stack direction="row" spacing={2}>
-                  <Box>
-                    <Typography variant="body2">Arbeid</Typography>
-                    <Typography variant="h6">{logs.filter(l => l.activity === "Work").length}</Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="body2">Møter</Typography>
-                    <Typography variant="h6">{logs.filter(l => l.activity === "Meeting").length}</Typography>
-                  </Box>
-                </Stack>
-                <Divider />
-                <Stack direction="row" spacing={2} alignItems="center">
-                  <Chip label={paidBreak ? "Betalt pause" : "Ubetalt pause"} onClick={() => updateSettings({paid_break: !paidBreak})} />
-                  <Typography variant="caption" color="text.secondary">Ved betalt pause trekkes ikke pause fra timene.</Typography>
-                </Stack>
-                <TextField
-                  label="Timesats (kr/t)"
-                  value={rateInput}
-                  inputMode="decimal"
-                  onChange={(e) => {
-                    const v = sanitizeRateInput(e.target.value);
-                    setRateInput(v);
-                    const n = parseRate(v);
-                    if (!isNaN(n)) updateSettings({ hourly_rate: n });
-                  }}
-                  onBlur={() => setRateInput(formatRate(rate))}
-                />
-                <Typography variant="body2">Estimert lønn (man–fre)</Typography>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  {showCalcSkeleton ? (
-                    <Skeleton variant="text" width={140} height={32} />
-                  ) : (
-                    <Typography variant="h5">{(rate * totalHours).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
-                  )}
-                </Stack>
-                <Typography variant="body2">Utgiftsdekning</Typography>
-                <Typography variant="h6">{totalExpenses.toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
-                <TextField 
-                  label="Ekstra utgifter (kr)"
-                  value={extraExpensesInput}
-                  inputMode="decimal"
-                  onChange={(e) => setExtraExpensesInput(sanitizeRateInput(e.target.value))}
-                  onBlur={() => {
-                    const n = parseRate(extraExpensesInput);
-                    if (!isNaN(n)) setExtraExpensesInput(formatRate(n));
-                  }}
-                />
-                <Typography variant="body2">Total utbetaling</Typography>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  {showCalcSkeleton ? (
-                    <Skeleton variant="text" width={180} height={32} />
-                  ) : (
-                    <Typography variant="h5" color="primary">{(rate * totalHours + totalExpenses + extraExpenses).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
-                  )}
-                </Stack>
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
-                  <FormControl sx={{ minWidth: 160 }}>
-                    <InputLabel>Skatteprosent</InputLabel>
-                    <Select
-                      label="Skatteprosent"
-                      value={String(taxPct)}
-                      onChange={(e) => { updateSettings({tax_pct: Number(e.target.value)}); showToast("Skatteprosent oppdatert"); }}
-                    >
-                      {[20,25,30,35,40,45,50].map(p => (
-                        <MenuItem key={p} value={String(p)}>{p}%</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <Box>
-                    <Typography variant="body2">Sett av til skatt</Typography>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      {showCalcSkeleton ? (
-                        <Skeleton variant="text" width={120} height={28} />
-                      ) : (
-                        <Typography variant="h6">{(rate * totalHours * (taxPct/100)).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
-                      )}
-                    </Stack>
-                  </Box>
-                </Stack>
-                <Divider />
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                  <Button variant="outlined" color="info" startIcon={<Inventory2Icon />} onClick={handleArchiveMonth}>Arkiver denne måneden</Button>
-                  <Button variant="outlined" color="warning" onClick={async () => { await deleteLogsMonth(dayjs().format("YYYYMM")); showToast("Denne måneden nullstilt", "success"); await mutate(); }}>Nullstill denne måneden</Button>
-                  <Button variant="outlined" color="error" onClick={async () => { if (confirm("Sikker på at du vil slette hele datasettet?")) { await deleteLogsAll(); showToast("Hele datasettet er nullstilt", "success"); await mutate(); } }}>Nullstill hele datasettet</Button>
-                </Stack>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+      {/* Nøkkeltall (Dialog) */}
+      <Dialog open={statsOpen} onClose={() => setStatsOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Månedsfilter og nøkkeltall</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Button size="small" onClick={() => { const next = dayjs(monthNavLocal+"01").subtract(1, "month").format("YYYYMM"); setMonthNavLocal(next); updateSettings({ month_nav: next }); }}>{"<"}</Button>
+              <TextField 
+                type="month"
+                label="Måned"
+                InputLabelProps={{ shrink: true }}
+                value={dayjs(monthNavLocal + '01').format('YYYY-MM')}
+                onChange={(e) => {
+                  const val = (e.target.value || '').replace(/[^0-9-]/g, '');
+                  const yyyymm = val.replace('-', '').slice(0,6);
+                  if (yyyymm.length === 6) { setMonthNavLocal(yyyymm); updateSettings({ month_nav: yyyymm }); }
+                }}
+              />
+              <Button size="small" onClick={() => { const next = dayjs(monthNavLocal+"01").add(1, "month").format("YYYYMM"); setMonthNavLocal(next); updateSettings({ month_nav: next }); }}>{">"}</Button>
+            </Stack>
+            <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
+              <Chip 
+                label="Uke"
+                size="small" 
+                onClick={() => updateViewMode('week')}
+                color={viewMode === 'week' ? "primary" : "default"}
+                variant={viewMode === 'week' ? "filled" : "outlined"}
+              />
+              <Chip 
+                label="Måned"
+                size="small" 
+                onClick={() => updateViewMode('month')}
+                color={viewMode === 'month' ? "primary" : "default"}
+                variant={viewMode === 'month' ? "filled" : "outlined"}
+              />
+              <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+              <Chip 
+                label="Denne måneden" 
+                size="small" 
+                onClick={() => { updateViewMode('month'); const cur = dayjs().format("YYYYMM"); setMonthNavLocal(cur); updateSettings({month_nav: cur}); }}
+                color={monthNavLocal === dayjs().format("YYYYMM") ? "primary" : "default"}
+              />
+              <Chip 
+                label="Forrige måned" 
+                size="small" 
+                onClick={() => { updateViewMode('month'); const prev = dayjs().subtract(1, "month").format("YYYYMM"); setMonthNavLocal(prev); updateSettings({month_nav: prev}); }}
+                color={monthNavLocal === dayjs().subtract(1, "month").format("YYYYMM") ? "primary" : "default"}
+              />
+              <Chip 
+                label="Dette året" 
+                size="small" 
+                onClick={() => { updateViewMode('month'); const start = dayjs().startOf("year").format("YYYYMM"); setMonthNavLocal(start); updateSettings({month_nav: start}); }}
+              />
+            </Stack>
+            <Divider />
+            <Typography variant="body2">Totale timer (man–fre)</Typography>
+            <Typography variant="h4">{totalHours.toFixed(2)}</Typography>
+            <Stack direction="row" spacing={2}>
+              <Box>
+                <Typography variant="body2">Arbeid</Typography>
+                <Typography variant="h6">{logs.filter(l => l.activity === "Work").length}</Typography>
+              </Box>
+              <Box>
+                <Typography variant="body2">Møter</Typography>
+                <Typography variant="h6">{logs.filter(l => l.activity === "Meeting").length}</Typography>
+              </Box>
+            </Stack>
+            <Divider />
+            <Stack direction="row" spacing={2} alignItems="center">
+              <Chip label={paidBreak ? "Betalt pause" : "Ubetalt pause"} onClick={() => updateSettings({paid_break: !paidBreak})} />
+              <Typography variant="caption" color="text.secondary">Ved betalt pause trekkes ikke pause fra timene.</Typography>
+            </Stack>
+            <TextField
+              label="Timesats (kr/t)"
+              value={rateInput}
+              inputMode="decimal"
+              onChange={(e) => {
+                const v = sanitizeRateInput(e.target.value);
+                setRateInput(v);
+                const n = parseRate(v);
+                if (!isNaN(n)) updateSettings({ hourly_rate: n });
+              }}
+              onBlur={() => setRateInput(formatRate(rate))}
+            />
+            <Typography variant="body2">Estimert lønn (man–fre)</Typography>
+            <Stack direction="row" spacing={1} alignItems="center">
+              {showCalcSkeleton ? (
+                <Skeleton variant="text" width={140} height={32} />
+              ) : (
+                <Typography variant="h5">{(rate * totalHours).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
+              )}
+            </Stack>
+            <Typography variant="body2">Utgiftsdekning</Typography>
+            <Typography variant="h6">{totalExpenses.toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
+            <TextField 
+              label="Ekstra utgifter (kr)"
+              value={extraExpensesInput}
+              inputMode="decimal"
+              onChange={(e) => setExtraExpensesInput(sanitizeRateInput(e.target.value))}
+              onBlur={() => {
+                const n = parseRate(extraExpensesInput);
+                if (!isNaN(n)) setExtraExpensesInput(formatRate(n));
+              }}
+            />
+            <Typography variant="body2">Total utbetaling</Typography>
+            <Stack direction="row" spacing={1} alignItems="center">
+              {showCalcSkeleton ? (
+                <Skeleton variant="text" width={180} height={32} />
+              ) : (
+                <Typography variant="h5" color="primary">{(rate * totalHours + totalExpenses + extraExpenses).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
+              )}
+            </Stack>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <Button variant="outlined" color="info" startIcon={<Inventory2Icon />} onClick={handleArchiveMonth}>Arkiver denne måneden</Button>
+              <Button variant="outlined" color="warning" onClick={async () => { await deleteLogsMonth(dayjs().format("YYYYMM")); showToast("Denne måneden nullstilt", "success"); await mutate(); }}>Nullstill denne måneden</Button>
+              <Button variant="outlined" color="error" onClick={async () => { if (confirm("Sikker på at du vil slette hele datasettet?")) { await deleteLogsAll(); showToast("Hele datasettet er nullstilt", "success"); await mutate(); } }}>Nullstill hele datasettet</Button>
+            </Stack>
+          </Stack>
+        </DialogContent>
+      </Dialog>
 
       <Grid container spacing={2} sx={{ mt: 1 }}>
         <Grid item xs={12}>
