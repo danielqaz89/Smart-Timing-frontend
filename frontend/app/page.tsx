@@ -1436,6 +1436,13 @@ export default function Home() {
   }
 
   const parentRef = useMemo(() => ({ current: null as any }), []);
+  function weekdayShort(dateStr: string) {
+    if (!dateStr) return '';
+    const d = dayjs(dateStr).day();
+    const names = ['Søn','Man','Tir','Ons','Tor','Fre','Lør'];
+    return names[d] || '';
+  }
+
   const rowVirtualizer = useVirtualizer({
     count: logs.length,
     getScrollElement: () => parentRef.current,
@@ -2064,6 +2071,7 @@ export default function Home() {
                 <TableHead>
                 <TableRow>
                   {bulkMode && <TableCell padding="checkbox" />}
+                  <TableCell>Dag</TableCell>
                   <TableCell>Dato</TableCell>
                   <TableCell>Inn</TableCell>
                   <TableCell>Ut</TableCell>
@@ -2097,6 +2105,7 @@ export default function Home() {
                           {editingId === r.id ? (
                             <>
                               {bulkMode && <TableCell />}
+                              <TableCell>{weekdayShort(editForm.date)}</TableCell>
                               <TableCell><TextField type="date" value={editForm.date} onChange={(e)=>setEditForm({...editForm, date: e.target.value})} size="small" /></TableCell>
                               <TableCell><TextField type="time" value={editForm.start} onChange={(e)=>setEditForm({...editForm, start: e.target.value})} size="small" /></TableCell>
                               <TableCell><TextField type="time" value={editForm.end} onChange={(e)=>setEditForm({...editForm, end: e.target.value})} size="small" /></TableCell>
@@ -2121,7 +2130,8 @@ export default function Home() {
                             </>
                           ) : (
                             <>
-                              <TableCell>{r.date}</TableCell>
+                              <TableCell>{weekdayShort(r.date)}</TableCell>
+                              <TableCell>{dayjs(r.date).format('DD.MM')}</TableCell>
                               <TableCell>{r.start_time?.slice(0,5)}</TableCell>
                               <TableCell>{r.end_time?.slice(0,5)}</TableCell>
                               <TableCell>{r.break_hours}</TableCell>
@@ -2155,7 +2165,7 @@ export default function Home() {
                 </div>
                 {!isLoading && logs.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={10}>
+                    <TableCell colSpan={12}>
                       <Typography variant="body2">Ingen rader i denne måneden enda.</Typography>
                     </TableCell>
                   </TableRow>
