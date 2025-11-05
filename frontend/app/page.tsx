@@ -2387,16 +2387,18 @@ export default function Home() {
               <Button onClick={async () => {
                 // Skip (mark done)
                 await updateSettings({ onboarding_done: true });
+                await mutateSettings();
                 setOnboardingOpen(false);
               }}>Hopp over</Button>
               <Button variant="contained" disabled={onbBusy} onClick={async () => {
                 setOnbBusy(true);
                 try {
-                  // Save rate
+                  // Save settings in one call
                   const n = parseRate(onbRateInput);
-                  if (!isNaN(n)) await updateSettings({ hourly_rate: n });
-                  // Mark onboarding done
-                  await updateSettings({ onboarding_done: true });
+                  const payload: any = { onboarding_done: true };
+                  if (!isNaN(n)) payload.hourly_rate = n;
+                  await updateSettings(payload);
+                  await mutateSettings();
                   // Optionally insert weekdays
                   if (onbApplyNow) {
                     const base = dayjs(monthNavLocal + "01");
