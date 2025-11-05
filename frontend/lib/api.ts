@@ -175,6 +175,16 @@ export async function initiateGoogleAuth(scopes: 'base' | 'gmail' = 'base', user
   return data.authUrl;
 }
 
+export async function disconnectGoogleAccount(userId = 'default') {
+  const res = await fetch(`${API_BASE}/api/auth/google/disconnect`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId }),
+  });
+  if (!res.ok) throw new Error('Failed to disconnect Google account');
+  return res.json();
+}
+
 export async function generateMonthlyReport(opts: { 
   month: string; 
   userId?: string; 

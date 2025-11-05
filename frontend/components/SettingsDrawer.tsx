@@ -29,6 +29,7 @@ import Link from "next/link";
 import { useUserSettings } from "../lib/hooks";
 import { useSnackbar } from "notistack";
 import GoogleSheetsPicker from "./GoogleSheetsPicker";
+import { getGoogleAuthStatus, initiateGoogleAuth, disconnectGoogleAccount } from "../lib/api";
 
 // Locale-safe helpers for Timesats input (Norwegian)
 const nbFormatter = new Intl.NumberFormat('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -67,6 +68,21 @@ export default function SettingsDrawer() {
   const [sheetUrl, setSheetUrl] = useState("");
   const [invoiceReminderActive, setInvoiceReminderActive] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [checkingGoogle, setCheckingGoogle] = useState(true);
+
+  // Check Google auth status when drawer opens
+  useEffect(() => {
+    if (open) {
+      setCheckingGoogle(true);
+      getGoogleAuthStatus()
+        .then(status => {
+          setGoogleConnected(status.isConnected && !status.needsReauth);
+        })
+        .catch(e => console.error('Failed to check Google auth:', e))
+        .finally(() => setCheckingGoogle(false));
+    }
+  }, [open]);
 
   // Load from database when drawer opens or settings change
   useEffect(() => {
@@ -296,6 +312,83 @@ export default function SettingsDrawer() {
                     <Typography variant="caption" color="text.secondary">
                       Webhook sender data til eksterne systemer. Sheets-URL for toveis synk.
                     </Typography>
+                  </Stack>
+                </AccordionDetails>
+              </Accordion>
+
+              {/* Google OAuth Connection */}
+              <Accordion>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="h6">🔗 Google-tilkobling</Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Stack spacing={2}>
+                    {checkingGoogle ? (
+                      <CircularProgress size={24} />
+                    ) : googleConnected ? (
+                      <>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Chip label="Tilkoblet" color="success" size="small" />
+                          <Typography variant="body2" color="text.secondary">
+                            Google-kontoen din er koblet til
+                          </Typography>
+                        </Stack>
+                        <Typography variant="caption" color="text.secondary">
+                          Med Google-tilkobling kan du:
+                        </Typography>
+                        <Typography variant="caption" component="div" color="text.secondary">
+                          • Generere rapporter i Google Docs<br/>
+                          • Sende e-post via Gmail<br/>
+                          • Synkronisere til Google Sheets<br/>
+                          • Velge filer fra Google Drive
+                        </Typography>
+                        <Divider sx={{ my: 1 }} />
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          size="small"
+                          onClick={async () => {
+                            if (confirm('Er du sikker på at du vil koble fra Google-kontoen din? Du må koble til på nytt for å bruke Google-funksjoner.')) {
+                              try {
+                                await disconnectGoogleAccount();
+                                setGoogleConnected(false);
+                                enqueueSnackbar('Google-konto frakoblet', { variant: 'success' });
+                              } catch (e: any) {
+                                enqueueSnackbar(`Kunne ikke koble fra: ${e?.message || e}`, { variant: 'error' });
+                              }
+                            }
+                          }}
+                        >
+                          Koble fra Google
+                        </Button>
+                        <Typography variant="caption" color="text.secondary">
+                          Frakoblingen gjelder kun denne applikasjonen. Du kan koble til igjen når som helst.
+                        </Typography>
+                      </>
+                    ) : (
+                      <>
+                        <Typography variant="body2" color="text.secondary">
+                          Koble til Google-kontoen din for å aktivere ekstra funksjoner.
+                        </Typography>
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          onClick={async () => {
+                            try {
+                              const authUrl = await initiateGoogleAuth();
+                              window.location.href = authUrl;
+                            } catch (e: any) {
+                              enqueueSnackbar(`Kunne ikke starte pålogging: ${e?.message || e}`, { variant: 'error' });
+                            }
+                          }}
+                        >
+                          🔗 Koble til Google
+                        </Button>
+                        <Typography variant="caption" color="text.secondary">
+                          Sikker pålogging via Google OAuth. Vi får tilgang til å lage dokumenter, sende e-post og lese filer på dine vegne.
+                        </Typography>
+                      </>
+                    )}
                   </Stack>
                 </AccordionDetails>
               </Accordion>
