@@ -6,6 +6,39 @@ import { Box, Button, Card, CardContent, CardHeader, CircularProgress, Container
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
 
+function InvitesList() {
+  const { fetchWithAuth } = useCompany();
+  const [invites, setInvites] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => { (async ()=>{ const res = await fetchWithAuth(`${API_BASE}/api/company/invites`); const d = await res.json(); if (res.ok) setInvites(d.invites||[]); setLoading(false); })(); }, []);
+  if (loading) return <CircularProgress size={16} />;
+  if (invites.length === 0) return <Typography variant="body2" color="text.secondary">Ingen ventende invitasjoner.</Typography>;
+  return (
+    <Stack spacing={1}>
+      {invites.map((i:any)=>{
+        const link = `${API_BASE}/api/company/invites/accept?token=${encodeURIComponent(i.token)}`;
+        const expired = i.expires_at && new Date(i.expires_at) < new Date();
+        return (
+          <Box key={i.id} sx={{ p:1, border:'1px solid', borderColor:'divider', borderRadius:1 }}>
+            <Typography variant="body2">
+              {i.invited_email} • rolle: {i.role} • utløper: {new Date(i.expires_at).toLocaleDateString()} {i.used_at ? '• BRUKT' : expired ? '• UTLØPT' : ''}
+            </Typography>
+            <Stack direction="row" spacing={1} sx={{ mt:0.5 }}>
+              <Button size="small" onClick={async ()=>{ await navigator.clipboard.writeText(link); }}>Kopier lenke</Button>
+              {!i.used_at && !expired && (
+                <Button size="small" onClick={async ()=>{ await fetchWithAuth(`${API_BASE}/api/company/invites/${i.id}/resend`, { method:'POST' }); const res = await fetchWithAuth(`${API_BASE}/api/company/invites`); const d = await res.json(); setInvites(d.invites||[]); }}>Send på nytt</Button>
+              )}
+              {!i.used_at && (
+                <Button size="small" color="error" onClick={async ()=>{ await fetchWithAuth(`${API_BASE}/api/company/invites/${i.id}`, { method:'DELETE' }); const res = await fetchWithAuth(`${API_BASE}/api/company/invites`); const d = await res.json(); setInvites(d.invites||[]); }}>Opphev</Button>
+              )}
+            </Stack>
+          </Box>
+        );
+      })}
+    </Stack>
+  );
+}
+
 function PortalContent() {
   const { loading, token, company, user, login, logout, fetchWithAuth } = useCompany();
   const [users, setUsers] = React.useState<any[]>([]);
@@ -47,28 +80,29 @@ function PortalContent() {
       </Card>
 
       <Card>
-        <CardHeader title="Legg til bruker" />
+        <CardHeader title="Inviter bruker (e‑post)" />
         <CardContent>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            <TextField label="Bruker e‑post" value={form.user_email} onChange={(e)=>setForm({ ...form, user_email: e.target.value })} />
-            <TextField label="Google e‑post (valgfritt)" value={form.google_email} onChange={(e)=>setForm({ ...form, google_email: e.target.value })} />
+            <TextField label="E‑post" value={form.user_email} onChange={(e)=>setForm({ ...form, user_email: e.target.value })} />
             <TextField select SelectProps={{ native: true }} label="Rolle" value={form.role} onChange={(e)=>setForm({ ...form, role: e.target.value })}>
               <option value="member">member</option>
               <option value="admin">admin</option>
             </TextField>
-            <TextField select SelectProps={{ native: true }} label="Godkjent" value={String(form.approved)} onChange={(e)=>setForm({ ...form, approved: e.target.value === 'true' })}>
-              <option value="false">false</option>
-              <option value="true">true</option>
-            </TextField>
             <Button variant="contained" onClick={async ()=>{
-              const res = await fetchWithAuth(`${API_BASE}/api/company/users`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(form) });
+              const res = await fetchWithAuth(`${API_BASE}/api/company/invites`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ invited_email: form.user_email, role: form.role }) });
               if (res.ok) {
                 setForm({ user_email: '', google_email: '', role: 'member', approved: false });
-                const reload = await fetchWithAuth(`${API_BASE}/api/company/users`);
-                const data = await reload.json(); setUsers(data.users||[]);
+                const inv = await fetchWithAuth(`${API_BASE}/api/company/invites`); const d = await inv.json(); (window as any)._invites = d.invites; // stored
               }
-            }}>Legg til</Button>
+            }}>Send invitasjon</Button>
           </Stack>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader title="Ventende invitasjoner" />
+        <CardContent>
+          <InvitesList />
         </CardContent>
       </Card>
 
