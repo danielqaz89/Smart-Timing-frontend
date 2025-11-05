@@ -997,6 +997,7 @@ export default function Home() {
   const logsRef = useRef<HTMLDivElement>(null);
   const importRef = useRef<HTMLDivElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
   const [mobileDialogOpen, setMobileDialogOpen] = useState(false);
   const [mobileDialogContent, setMobileDialogContent] = useState<"stamp-work" | "stamp-meeting" | "manual-entry" | "import" | null>(null);
   
@@ -1165,6 +1166,26 @@ export default function Home() {
     }, 1000);
     return () => clearInterval(interval);
   }, [activeStamp]);
+
+  // Live clock (Europe/Oslo, fallback to local)
+  const [nowTime, setNowTime] = useState<string>(dayjs().format('HH:mm:ss'));
+  useEffect(() => {
+    const update = () => {
+      try {
+        const s = new Intl.DateTimeFormat('nb-NO', {
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+          timeZone: 'Europe/Oslo'
+        }).format(new Date());
+        // Ensure HH:MM:SS
+        setNowTime(s.replace(/\./g, ':'));
+      } catch {
+        setNowTime(dayjs().format('HH:mm:ss'));
+      }
+    };
+    update();
+    const t = setInterval(update, 1000);
+    return () => clearInterval(t);
+  }, []);
   
   const totalHours = useMemo(() => {
     return logs.reduce((sum, r) => {
@@ -1561,7 +1582,7 @@ export default function Home() {
       setQuickActivity("Meeting");
       stemplingRef.current?.scrollIntoView({ behavior: "smooth" });
     } else if (action === "manual-entry") {
-      manualRef.current?.scrollIntoView({ behavior: "smooth" });
+      setManualOpen(true);
     } else if (action === "import") {
       importRef.current?.scrollIntoView({ behavior: "smooth" });
     }
@@ -1663,24 +1684,30 @@ export default function Home() {
         </Card>
       )}
 
-      <Grid container spacing={2}>
-        <Grid item xs={12} lg={4} ref={stemplingRef}>
+      <Grid container spacing={2} justifyContent="center">
+        <Grid item xs={12} md={8} lg={6} ref={stemplingRef}>
           <Card>
             <CardHeader title="Stempling" />
             <CardContent>
-              <Stack spacing={2}>
-                {activeStamp && (
-                  <Box sx={{ p: 2, bgcolor: 'success.light', borderRadius: 1 }}>
-                    <Stack spacing={1}>
-                      <Typography variant="caption" color="success.dark" fontWeight="bold">
-                        Stemplet inn: {activeStamp.start_time?.slice(0,5)} - {activeStamp.activity === 'Work' ? 'Arbeid' : 'Møte'}
+              <Stack spacing={2} alignItems="center">
+                {/* Timer display */}
+                <Box sx={{ p: 2, bgcolor: activeStamp ? 'success.light' : 'action.hover', borderRadius: 1, width: '100%' }}>
+                  <Stack spacing={1} alignItems="center">
+                    <Typography variant="caption" color="text.secondary" fontWeight="bold">
+                      Tid
+                    </Typography>
+                    <Typography variant="h3" fontWeight="bold" color={activeStamp ? 'success.dark' : 'text.primary'}>
+                      {activeStamp ? elapsedTime : nowTime}
+                    </Typography>
+                    {activeStamp && (
+                      <Typography variant="caption" color="success.dark">
+                        Stemplet inn: {activeStamp.start_time?.slice(0,5)} · {activeStamp.activity === 'Work' ? 'Arbeid' : 'Møte'}
                       </Typography>
-                      <Typography variant="h4" color="success.dark" fontWeight="bold">
-                        {elapsedTime}
-                      </Typography>
-                    </Stack>
-                  </Box>
-                )}
+                    )}
+                  </Stack>
+                </Box>
+
+                {/* Aktivitet */}
                 <FormControl fullWidth>
                   <InputLabel>Aktivitet</InputLabel>
                   <Select
@@ -1692,253 +1719,32 @@ export default function Home() {
                     <MenuItem value="Meeting">Møte</MenuItem>
                   </Select>
                 </FormControl>
-                <TextField label="Tittel / Møte" value={quickTitle} onChange={(e) => setQuickTitle(e.target.value)} fullWidth />
-                <TextField label="Prosjekt / Kunde" value={quickProject} onChange={(e) => setQuickProject(e.target.value)} fullWidth />
-                <TextField label="Sted / Modus" value={quickPlace} onChange={(e) => setQuickPlace(e.target.value)} fullWidth />
-                <TextField label="Notater (valgfritt)" value={quickNotes} onChange={(e) => setQuickNotes(e.target.value)} multiline minRows={2} fullWidth />
-                <Button 
-                  variant="contained" 
-                  onClick={handleQuickStamp}
-                  size="large"
-                  sx={{ py: 1.5 }}
-                >
-                  Stemple INN
-                </Button>
-                <Stack direction="row" spacing={1} flexWrap="wrap">
-                  {templates.map((t) => (
-                    <Chip 
-                      key={t.id}
-                      label={t.label} 
-                      size="small" 
-                      onClick={() => {
-                        setQuickActivity(t.activity);
-                        setQuickTitle(t.title || '');
-                        setQuickProject(t.project || '');
-                        setQuickPlace(t.place || '');
-                      }}
-                      clickable
-                      aria-label={`Bruk mal: ${t.label}`}
-                    />
-                  ))}
-                </Stack>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
 
-        <Grid item xs={12} lg={4} ref={manualRef}>
-          <Card>
-            <CardHeader title="Legg til manuelt" />
-            <CardContent>
-              <Stack spacing={2}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <TextField type="date" label="Dato" InputLabelProps={{ shrink: true }} value={date} onChange={(e) => setDate(e.target.value)} sx={{ flex: 1 }} />
-                  <Chip label="I dag" size="small" onClick={() => setDate(dayjs().format("YYYY-MM-DD"))} />
-                  <Chip label="I går" size="small" onClick={() => setDate(dayjs().subtract(1, 'day').format("YYYY-MM-DD"))} />
-                </Stack>
-                <Button 
-                  variant="outlined" 
-                  size="small" 
-                  onClick={() => {
-                    const lastEntry = logs.find(l => dayjs(l.date).isBefore(dayjs()));
-                    if (lastEntry) {
-                      setManualActivity(lastEntry.activity as any);
-                      setStart(lastEntry.start_time?.slice(0,5) || "");
-                      setEnd(lastEntry.end_time?.slice(0,5) || "");
-                      setBreakHours(Number(lastEntry.break_hours || 0));
-                      setManualTitle(lastEntry.title || "");
-                      setManualProject(lastEntry.project || "");
-                      setManualPlace(lastEntry.place || "");
-                      showToast("Forrige rad kopiert");
-                    } else {
-                      showToast("Ingen tidligere rader funnet", "warning");
-                    }
-                  }}
-                >
-                  Kopier forrige rad
-                </Button>
-                <FormControl fullWidth>
-                  <InputLabel>Aktivitet</InputLabel>
-                  <Select
-                    label="Aktivitet"
-                    value={manualActivity}
-                    onChange={(e) => setManualActivity(e.target.value as any)}
-                  >
-                    <MenuItem value="Work">Arbeid</MenuItem>
-                    <MenuItem value="Meeting">Møte</MenuItem>
-                  </Select>
-                </FormControl>
-                <Stack direction="row" spacing={2}>
-                  <TextField type="time" label="Inn" InputLabelProps={{ shrink: true }} value={start} onChange={(e) => setStart(e.target.value)} fullWidth />
-                  <TextField 
-                    type="time" 
-                    label="Ut" 
-                    InputLabelProps={{ shrink: true }} 
-                    value={end} 
-                    onChange={(e) => setEnd(e.target.value)} 
-                    fullWidth 
-                    error={end < start && end !== "" && start !== ""}
-                    helperText={end < start && end !== "" && start !== "" ? "Ut må være etter Inn" : ""}
-                  />
-                </Stack>
-                <TextField 
-                  type="number" 
-                  label="Pause (timer)" 
-                  value={breakHours} 
-                  onChange={(e) => setBreakHours(Number(e.target.value))} 
-                  fullWidth 
-                  error={breakHours < 0}
-                  helperText={breakHours < 0 ? "Pause kan ikke være negativ" : ""}
-                  InputProps={{ inputProps: { min: 0, step: 0.5 } }}
-                />
-                <TextField 
-                  type="number" 
-                  label="Utgiftsdekning (kr)" 
-                  value={expenseCoverage} 
-                  onChange={(e) => setExpenseCoverage(Number(e.target.value) || 0)} 
-                  fullWidth 
-                  InputProps={{ inputProps: { min: 0, step: 10 } }}
-                  aria-label="Utgiftsdekning i kroner"
-                />
-                <TextField label="Tittel / Møte" value={manualTitle} onChange={(e) => setManualTitle(e.target.value)} fullWidth />
-                <TextField label="Prosjekt / Kunde" value={manualProject} onChange={(e) => setManualProject(e.target.value)} fullWidth />
-                <TextField label="Sted / Modus" value={manualPlace} onChange={(e) => setManualPlace(e.target.value)} fullWidth />
-                <TextField label="Notater" value={manualNotes} onChange={(e) => setManualNotes(e.target.value)} multiline minRows={2} fullWidth />
-                <Button 
-                  variant="contained" 
-                  onClick={handleAddManual}
-                  size="large"
-                  sx={{ py: 1.5 }}
-                >
-                  Legg til
-                </Button>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} lg={4} ref={statsRef}>
-          <Card>
-            <CardHeader title="Månedsfilter og nøkkeltall" />
-            <CardContent>
-              <Stack spacing={2}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Button size="small" onClick={() => updateSettings({month_nav: dayjs(monthNav+"01").subtract(1, "month").format("YYYYMM")})}>{"<"}</Button>
-                  <TextField label="Måned" value={monthNav} onChange={(e) => updateSettings({month_nav: e.target.value.replace(/[^0-9]/g, '').slice(0,6)})} />
-                  <Button size="small" onClick={() => updateSettings({month_nav: dayjs(monthNav+"01").add(1, "month").format("YYYYMM")})}>{">"}</Button>
-                </Stack>
-                <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
-                  <Chip 
-                    label="Uke"
-                    size="small" 
-                    onClick={() => updateViewMode('week')}
-                    color={viewMode === 'week' ? "primary" : "default"}
-                    variant={viewMode === 'week' ? "filled" : "outlined"}
-                  />
-                  <Chip 
-                    label="Måned"
-                    size="small" 
-                    onClick={() => updateViewMode('month')}
-                    color={viewMode === 'month' ? "primary" : "default"}
-                    variant={viewMode === 'month' ? "filled" : "outlined"}
-                  />
-                  <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
-                  <Chip 
-                    label="Denne måneden" 
-                    size="small" 
-                    onClick={() => {
-                      updateViewMode('month');
-                      updateSettings({month_nav: dayjs().format("YYYYMM")});
-                    }}
-                    color={monthNav === dayjs().format("YYYYMM") ? "primary" : "default"}
-                  />
-                  <Chip 
-                    label="Forrige måned" 
-                    size="small" 
-                    onClick={() => {
-                      updateViewMode('month');
-                      updateSettings({month_nav: dayjs().subtract(1, "month").format("YYYYMM")});
-                    }}
-                    color={monthNav === dayjs().subtract(1, "month").format("YYYYMM") ? "primary" : "default"}
-                  />
-                  <Chip 
-                    label="Dette året" 
-                    size="small" 
-                    onClick={() => {
-                      updateViewMode('month');
-                      updateSettings({month_nav: dayjs().startOf("year").format("YYYYMM")});
-                    }}
-                  />
-                </Stack>
-                <Divider />
-                <Typography variant="body2">Totale timer (man–fre)</Typography>
-                <Typography variant="h4">{totalHours.toFixed(2)}</Typography>
-                <Stack direction="row" spacing={2}>
-                  <Box>
-                    <Typography variant="body2">Arbeid</Typography>
-                    <Typography variant="h6">{logs.filter(l => l.activity === "Work").length}</Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="body2">Møter</Typography>
-                    <Typography variant="h6">{logs.filter(l => l.activity === "Meeting").length}</Typography>
-                  </Box>
-                </Stack>
-                <Divider />
-                <Stack direction="row" spacing={2} alignItems="center">
-                  <Chip label={paidBreak ? "Betalt pause" : "Ubetalt pause"} onClick={() => updateSettings({paid_break: !paidBreak})} />
-                  <Typography variant="caption" color="text.secondary">Ved betalt pause trekkes ikke pause fra timene.</Typography>
-                </Stack>
+                {/* Periode: Måned */}
                 <TextField
-                  label="Timesats (kr/t)"
-                  value={rateInput}
-                  inputMode="decimal"
-                  onChange={(e) => {
-                    const v = sanitizeRateInput(e.target.value);
-                    setRateInput(v);
-                    const n = parseRate(v);
-                    if (!isNaN(n)) updateSettings({ hourly_rate: n });
-                  }}
-                  onBlur={() => setRateInput(formatRate(rate))}
+                  type="month"
+                  label="Periode (Måned)"
+                  InputLabelProps={{ shrink: true }}
+                  value={dayjs(monthNav + '01').format('YYYY-MM')}
+                  onChange={(e) => updateSettings({ month_nav: e.target.value.replace(/[^0-9]/g, '').slice(0,6) })}
+                  fullWidth
                 />
-                <Typography variant="body2">Estimert lønn (man–fre)</Typography>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  {calcBusy && <CircularProgress size={16} />}
-                  <Typography variant="h5">{(rate * totalHours).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
-                </Stack>
-                <Typography variant="body2">Utgiftsdekning</Typography>
-                <Typography variant="h6">{totalExpenses.toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
-                <Typography variant="body2">Total utbetaling</Typography>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  {calcBusy && <CircularProgress size={16} />}
-                  <Typography variant="h5" color="primary">{(rate * totalHours + totalExpenses).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
-                </Stack>
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
-                  <FormControl sx={{ minWidth: 160 }}>
-                    <InputLabel>Skatteprosent</InputLabel>
-                    <Select
-                      label="Skatteprosent"
-                      value={String(taxPct)}
-                      onChange={(e) => { updateSettings({tax_pct: Number(e.target.value)}); showToast("Skatteprosent oppdatert"); }}
-                    >
-                      {[20,25,30,35,40,45,50].map(p => (
-                        <MenuItem key={p} value={String(p)}>{p}%</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <Box>
-                    <Typography variant="body2">Sett av til skatt</Typography>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      {calcBusy && <CircularProgress size={14} />}
-                      <Typography variant="h6">{(rate * totalHours * (taxPct/100)).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
-                    </Stack>
-                  </Box>
-                </Stack>
-                <Divider />
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                  <Button variant="outlined" color="info" startIcon={<Inventory2Icon />} onClick={handleArchiveMonth}>Arkiver denne måneden</Button>
-                  <Button variant="outlined" color="warning" onClick={async () => { await deleteLogsMonth(dayjs().format("YYYYMM")); showToast("Denne måneden nullstilt", "success"); await mutate(); }}>Nullstill denne måneden</Button>
-                  <Button variant="outlined" color="error" onClick={async () => { if (confirm("Sikker på at du vil slette hele datasettet?")) { await deleteLogsAll(); showToast("Hele datasettet er nullstilt", "success"); await mutate(); } }}>Nullstill hele datasettet</Button>
-                </Stack>
+
+                {/* Stamp button */}
+                {activeStamp ? (
+                  <Button variant="contained" color="error" onClick={handleStampOutFromFAB} size="large" sx={{ py: 1.5, width: '100%' }}>
+                    Stemple UT
+                  </Button>
+                ) : (
+                  <Button variant="contained" onClick={handleQuickStamp} size="large" sx={{ py: 1.5, width: '100%' }}>
+                    Stemple INN
+                  </Button>
+                )}
+
+                {/* Manual entry opener */}
+                <Button variant="outlined" onClick={() => setManualOpen(true)} sx={{ width: '100%' }}>
+                  Legg til manuelt
+                </Button>
               </Stack>
             </CardContent>
           </Card>
@@ -2183,6 +1989,96 @@ export default function Home() {
         onStampIn={handleQuickStampFromFAB}
         onStampOut={handleStampOutFromFAB}
       />
+
+      {/* Manuell registrering (Dialog) */}
+      <Dialog open={manualOpen} onClose={() => setManualOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Legg til manuelt</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <TextField type="date" label="Dato" InputLabelProps={{ shrink: true }} value={date} onChange={(e) => setDate(e.target.value)} sx={{ flex: 1 }} />
+              <Chip label="I dag" size="small" onClick={() => setDate(dayjs().format("YYYY-MM-DD"))} />
+              <Chip label="I går" size="small" onClick={() => setDate(dayjs().subtract(1, 'day').format("YYYY-MM-DD"))} />
+            </Stack>
+            <Button 
+              variant="outlined" 
+              size="small" 
+              onClick={() => {
+                const lastEntry = logs.find(l => dayjs(l.date).isBefore(dayjs()));
+                if (lastEntry) {
+                  setManualActivity(lastEntry.activity as any);
+                  setStart(lastEntry.start_time?.slice(0,5) || "");
+                  setEnd(lastEntry.end_time?.slice(0,5) || "");
+                  setBreakHours(Number(lastEntry.break_hours || 0));
+                  setManualTitle(lastEntry.title || "");
+                  setManualProject(lastEntry.project || "");
+                  setManualPlace(lastEntry.place || "");
+                  showToast("Forrige rad kopiert");
+                } else {
+                  showToast("Ingen tidligere rader funnet", "warning");
+                }
+              }}
+            >
+              Kopier forrige rad
+            </Button>
+            <FormControl fullWidth>
+              <InputLabel>Aktivitet</InputLabel>
+              <Select
+                label="Aktivitet"
+                value={manualActivity}
+                onChange={(e) => setManualActivity(e.target.value as any)}
+              >
+                <MenuItem value="Work">Arbeid</MenuItem>
+                <MenuItem value="Meeting">Møte</MenuItem>
+              </Select>
+            </FormControl>
+            <Stack direction="row" spacing={2}>
+              <TextField type="time" label="Inn" InputLabelProps={{ shrink: true }} value={start} onChange={(e) => setStart(e.target.value)} fullWidth />
+              <TextField 
+                type="time" 
+                label="Ut" 
+                InputLabelProps={{ shrink: true }} 
+                value={end} 
+                onChange={(e) => setEnd(e.target.value)} 
+                fullWidth 
+                error={end < start && end !== "" && start !== ""}
+                helperText={end < start && end !== "" && start !== "" ? "Ut må være etter Inn" : ""}
+              />
+            </Stack>
+            <TextField 
+              type="number" 
+              label="Pause (timer)" 
+              value={breakHours} 
+              onChange={(e) => setBreakHours(Number(e.target.value))} 
+              fullWidth 
+              error={breakHours < 0}
+              helperText={breakHours < 0 ? "Pause kan ikke være negativ" : ""}
+              InputProps={{ inputProps: { min: 0, step: 0.5 } }}
+            />
+            <TextField 
+              type="number" 
+              label="Utgiftsdekning (kr)" 
+              value={expenseCoverage} 
+              onChange={(e) => setExpenseCoverage(Number(e.target.value) || 0)} 
+              fullWidth 
+              InputProps={{ inputProps: { min: 0, step: 10 } }}
+              aria-label="Utgiftsdekning i kroner"
+            />
+            <TextField label="Tittel / Møte" value={manualTitle} onChange={(e) => setManualTitle(e.target.value)} fullWidth />
+            <TextField label="Prosjekt / Kunde" value={manualProject} onChange={(e) => setManualProject(e.target.value)} fullWidth />
+            <TextField label="Sted / Modus" value={manualPlace} onChange={(e) => setManualPlace(e.target.value)} fullWidth />
+            <TextField label="Notater" value={manualNotes} onChange={(e) => setManualNotes(e.target.value)} multiline minRows={2} fullWidth />
+            <Button 
+              variant="contained" 
+              onClick={async () => { await handleAddManual(); setManualOpen(false); }}
+              size="large"
+              sx={{ py: 1.5 }}
+            >
+              Legg til
+            </Button>
+          </Stack>
+        </DialogContent>
+      </Dialog>
     </Container>
   );
 }

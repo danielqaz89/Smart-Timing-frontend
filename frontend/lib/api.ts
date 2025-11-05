@@ -361,3 +361,25 @@ export async function deleteQuickTemplate(id: number) {
   if (!res.ok) throw new Error('Failed to delete template');
   return res.json();
 }
+
+// ===== COMPANIES =====
+export type CompanyRecord = {
+  id?: number;
+  name: string;
+  orgnr?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  logo_base64?: string | null;
+  display_order?: number;
+};
+
+export async function createOrUpdateCompany(company: CompanyRecord) {
+  const res = await fetch(`${API_BASE}/api/companies`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(company),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || 'Failed to save company');
+  return data;
+}
