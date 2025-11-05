@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
 
-type CompanyUser = { id: number; email: string; role: "admin" | "member" };
+type CompanyUser = { id: number; email: string; role: "admin" | "member" | "case_manager" };
 
 type CompanyContextType = {
   token: string | null;

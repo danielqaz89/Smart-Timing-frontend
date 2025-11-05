@@ -274,6 +274,7 @@ function CompaniesContent() {
             <TextField label="Google Email (optional)" value={userForm.google_email} onChange={(e) => setUserForm({ ...userForm, google_email: e.target.value })} />
             <TextField select SelectProps={{ native: true }} label="Role" value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value as any })}>
               <option value="member">member</option>
+              <option value="case_manager">case_manager</option>
               <option value="admin">admin</option>
             </TextField>
             <TextField select SelectProps={{ native: true }} label="Approved" value={String(userForm.approved)} onChange={(e) => setUserForm({ ...userForm, approved: e.target.value === 'true' })}>
@@ -310,6 +311,7 @@ function CompaniesContent() {
                       <TableCell>
                         <TextField size="small" select SelectProps={{ native: true }} defaultValue={u.role} onChange={(e) => updateCompanyUser(u.id, { role: e.target.value })}>
                           <option value="member">member</option>
+                          <option value="case_manager">case_manager</option>
                           <option value="admin">admin</option>
                         </TextField>
                       </TableCell>

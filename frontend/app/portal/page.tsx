@@ -75,7 +75,28 @@ function PortalContent() {
       <Card>
         <CardHeader title={company?.name || "Din bedrift"} subheader={`Innlogget som ${user?.email} (${user?.role})`} />
         <CardContent>
-          <Button variant="outlined" size="small" onClick={logout}>Logg ut</Button>
+          <Stack direction={{ xs:'column', md:'row' }} spacing={2} alignItems="center">
+            <Button variant="outlined" size="small" onClick={logout}>Logg ut</Button>
+            {/* Logo uploader (admin) */}
+            {user?.role === 'admin' && (
+              <>
+                <input id="logo-input" type="file" accept="image/*" style={{ display:'none' }} onChange={async (e)=>{
+                  const file = e.target.files?.[0]; if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = async ()=>{
+                    const b64 = String(reader.result);
+                    await fetchWithAuth(`${API_BASE}/api/company/logo`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ logo_base64: b64 }) });
+                    window.location.reload();
+                  };
+                  reader.readAsDataURL(file);
+                }} />
+                <label htmlFor="logo-input">
+                  <Button variant="outlined" size="small" component="span">Last opp logo</Button>
+                </label>
+                {company?.logo_base64 && <img src={company.logo_base64} alt="Logo" style={{ height:32 }} />}
+              </>
+            )}
+          </Stack>
         </CardContent>
       </Card>
 
@@ -86,6 +107,7 @@ function PortalContent() {
             <TextField label="E‑post" value={form.user_email} onChange={(e)=>setForm({ ...form, user_email: e.target.value })} />
             <TextField select SelectProps={{ native: true }} label="Rolle" value={form.role} onChange={(e)=>setForm({ ...form, role: e.target.value })}>
               <option value="member">member</option>
+              <option value="case_manager">case_manager</option>
               <option value="admin">admin</option>
             </TextField>
             <Button variant="contained" onClick={async ()=>{
@@ -116,28 +138,32 @@ function PortalContent() {
               {users.map((u:any) => (
                 <Box key={u.id} sx={{ p:2, border:'1px solid', borderColor:'divider', borderRadius:1 }}>
                   <Typography variant="body2"><strong>{u.user_email}</strong> • Google: {u.google_email || '—'} • Rolle: {u.role} • Godkjent: {String(u.approved)}</Typography>
-                  <Stack direction={{ xs:'column', md:'row' }} spacing={1} sx={{ mt:1 }}>
-                    <TextField size="small" label="Ny saksnr" onKeyDown={async (e)=>{
-                      if (e.key==='Enter') {
-                        const val = (e.target as HTMLInputElement).value.trim();
-                        if (!val) return; await fetchWithAuth(`${API_BASE}/api/company/users/${u.id}/cases`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ case_id: val }) });
-                        (e.target as HTMLInputElement).value=''; const reload = await fetchWithAuth(`${API_BASE}/api/company/users`); const d = await reload.json(); setUsers(d.users||[]);
-                      }
-                    }} />
-                    <Button size="small" variant="outlined" onClick={async ()=>{
-                      const input = (document.activeElement as HTMLInputElement); const val = input?.value?.trim(); if (!val) return;
-                      await fetchWithAuth(`${API_BASE}/api/company/users/${u.id}/cases`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ case_id: val }) });
-                      input.value=''; const reload = await fetchWithAuth(`${API_BASE}/api/company/users`); const d = await reload.json(); setUsers(d.users||[]);
-                    }}>Legg til</Button>
-                  </Stack>
-                  <Stack direction="row" spacing={1} sx={{ mt:1, flexWrap:'wrap' }}>
-                    {(u.cases||[]).map((c:any)=>(
-                      <Button key={c.id} size="small" variant="outlined" onClick={async ()=>{
-                        await fetchWithAuth(`${API_BASE}/api/company/users/${u.id}/cases/${c.id}`, { method:'DELETE' });
-                        const reload = await fetchWithAuth(`${API_BASE}/api/company/users`); const d = await reload.json(); setUsers(d.users||[]);
-                      }}>{c.case_id} ✕</Button>
-                    ))}
-                  </Stack>
+                  {(user?.role === 'admin' || user?.role === 'case_manager') && (
+                    <>
+                      <Stack direction={{ xs:'column', md:'row' }} spacing={1} sx={{ mt:1 }}>
+                        <TextField size="small" label="Ny saksnr" onKeyDown={async (e)=>{
+                          if (e.key==='Enter') {
+                            const val = (e.target as HTMLInputElement).value.trim();
+                            if (!val) return; await fetchWithAuth(`${API_BASE}/api/company/users/${u.id}/cases`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ case_id: val }) });
+                            (e.target as HTMLInputElement).value=''; const reload = await fetchWithAuth(`${API_BASE}/api/company/users`); const d = await reload.json(); setUsers(d.users||[]);
+                          }
+                        }} />
+                        <Button size="small" variant="outlined" onClick={async ()=>{
+                          const input = (document.activeElement as HTMLInputElement); const val = input?.value?.trim(); if (!val) return;
+                          await fetchWithAuth(`${API_BASE}/api/company/users/${u.id}/cases`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ case_id: val }) });
+                          input.value=''; const reload = await fetchWithAuth(`${API_BASE}/api/company/users`); const d = await reload.json(); setUsers(d.users||[]);
+                        }}>Legg til</Button>
+                      </Stack>
+                      <Stack direction="row" spacing={1} sx={{ mt:1, flexWrap:'wrap' }}>
+                        {(u.cases||[]).map((c:any)=>(
+                          <Button key={c.id} size="small" variant="outlined" onClick={async ()=>{
+                            await fetchWithAuth(`${API_BASE}/api/company/users/${u.id}/cases/${c.id}`, { method:'DELETE' });
+                            const reload = await fetchWithAuth(`${API_BASE}/api/company/users`); const d = await reload.json(); setUsers(d.users||[]);
+                          }}>{c.case_id} ✕</Button>
+                        ))}
+                      </Stack>
+                    </>
+                  )}
                 </Box>
               ))}
             </Stack>
