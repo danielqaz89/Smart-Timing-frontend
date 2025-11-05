@@ -47,7 +47,7 @@ import ArchiveIcon from "@mui/icons-material/Archive";
 import UnarchiveIcon from "@mui/icons-material/Unarchive";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
 import dayjs from "dayjs";
-import { API_BASE, createLog, deleteLog, fetchLogs, createLogsBulk, webhookTestRelay, deleteLogsMonth, deleteLogsAll, updateLog, sendTimesheet, sendTimesheetViaGmail, getGoogleAuthStatus, generateMonthlyReport, archiveLog, unarchiveLog, archiveLogsByMonth, syncToGoogleSheets, exportUserData, deleteUserAccount, type LogRow } from "../lib/api";
+import { API_BASE, createLog, deleteLog, fetchLogs, createLogsBulk, webhookTestRelay, deleteLogsMonth, deleteLogsAll, updateLog, sendTimesheet, sendTimesheetViaGmail, getGoogleAuthStatus, initiateGoogleAuth, generateMonthlyReport, archiveLog, unarchiveLog, archiveLogsByMonth, syncToGoogleSheets, exportUserData, deleteUserAccount, type LogRow } from "../lib/api";
 import { exportToPDF } from "../lib/pdfExport";
 import { useThemeMode } from "../components/ThemeRegistry";
 import Brightness4Icon from "@mui/icons-material/Brightness4";
@@ -569,9 +569,28 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
 
   if (!googleConnected) {
     return (
-      <Typography variant="body2" color="text.secondary">
-        Koble til Google-kontoen din for å generere rapporter.
-      </Typography>
+      <Stack spacing={2}>
+        <Typography variant="body2" color="text.secondary">
+          Koble til Google-kontoen din for å generere rapporter automatisk i Google Docs.
+        </Typography>
+        <Button 
+          variant="contained" 
+          color="primary"
+          onClick={async () => {
+            try {
+              const authUrl = await initiateGoogleAuth();
+              window.location.href = authUrl;
+            } catch (e: any) {
+              onToast(`Kunne ikke starte Google-pålogging: ${e?.message || e}`, 'error');
+            }
+          }}
+        >
+          🔗 Koble til Google-konto
+        </Button>
+        <Typography variant="caption" color="text.secondary">
+          Sikker pålogging via Google OAuth. Vi får tilgang til å lage dokumenter og sende e-post på dine vegne.
+        </Typography>
+      </Stack>
     );
   }
 
@@ -920,6 +939,30 @@ function SendTimesheet({ month, onToast, settings, updateSettings }: { month: st
         </>
       ) : (
         <>
+          {!googleConnected && (
+            <Stack spacing={1} sx={{ p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
+              <Typography variant="body2" fontWeight="bold">
+                💡 Tips: Koble til Google for enklere sending
+              </Typography>
+              <Button 
+                variant="outlined" 
+                size="small"
+                onClick={async () => {
+                  try {
+                    const authUrl = await initiateGoogleAuth();
+                    window.location.href = authUrl;
+                  } catch (e: any) {
+                    onToast(`Kunne ikke starte Google-pålogging: ${e?.message || e}`, 'error');
+                  }
+                }}
+              >
+                🔗 Koble til Google-konto
+              </Button>
+              <Typography variant="caption" color="text.secondary">
+                Send direkte fra Gmail uten app-passord
+              </Typography>
+            </Stack>
+          )}
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
             <TextField label="Avsender e-post" value={sender} onChange={(e)=>updateSettings({timesheet_sender: e.target.value})} fullWidth />
             <TextField label="Mottaker e-post" value={recipient} onChange={(e)=>updateSettings({timesheet_recipient: e.target.value})} fullWidth />
@@ -934,7 +977,6 @@ function SendTimesheet({ month, onToast, settings, updateSettings }: { month: st
           <TextField type="password" label="App-passord (SMTP)" value={smtpPass} onChange={(e)=>updateSettings({smtp_app_password: e.target.value})} fullWidth />
           <Button variant="contained" onClick={handleSendSMTP} disabled={busy || !sender || !recipient}>Send via SMTP</Button>
           <Typography variant="caption" color="text.secondary">
-            {googleConnected ? 'SMTP-modus: ' : 'Koble til Google-kontoen din for enklere sending, eller '}
             Vi gjetter SMTP basert på e-post (Gmail/Outlook/Yahoo/iCloud/Proton m.fl.). Bruk app-passord for Gmail/Outlook.
           </Typography>
         </>
