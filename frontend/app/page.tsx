@@ -39,6 +39,11 @@ import {
   MenuItem as MuiMenuItem,
   useMediaQuery,
   useTheme,
+  Alert,
+  AlertTitle,
+  List,
+  ListItem,
+  ListItemIcon,
 } from "@mui/material";
 import { useSnackbar } from "notistack";
 const ActionsMenuItem = MuiMenuItem;
@@ -721,6 +726,24 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
       )}
 
       <Divider />
+
+      {/* Privacy Guidelines (Miljøarbeider) */}
+      {(template === 'miljøarbeider' || template === 'auto') && (
+        <Alert severity="warning" sx={{ borderRadius: 2 }}>
+          <AlertTitle>⚠️ Personvernretningslinjer for miljøarbeider</AlertTitle>
+          <Stack spacing={0.5} component="div">
+            <Typography variant="body2"><strong>Viktig:</strong> Rapporter skal ikke inneholde personopplysninger.</Typography>
+            <Typography variant="body2">• Ikke bruk navn på klienter</Typography>
+            <Typography variant="body2">• Bruk generelle betegnelser: «Gutten», «Jenta», «Brukeren», «Deltakeren»</Typography>
+            <Typography variant="body2">• Unngå detaljer som kan identifisere personer (alder, adresse, spesifikke situasjoner)</Typography>
+            <Typography variant="body2">• Fokuser på aktiviteter og utvikling, ikke identitet</Typography>
+            <Typography variant="body2">• Vurder anonymisering av steder ved behov</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Disse retningslinjene sikrer GDPR‑etterlevelse og beskytter klientenes personvern.
+            </Typography>
+          </Stack>
+        </Alert>
+      )}
 
       {/* Custom Introduction */}
       <Stack spacing={1}>
