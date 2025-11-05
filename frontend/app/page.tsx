@@ -2348,6 +2348,18 @@ export default function Home() {
               Slik setter du opp din Smart Timing-løsning. Du kan endre dette senere i Innstillinger.
             </Typography>
 
+            {canAddWeekends && (
+              <Alert severity="warning" sx={{ borderRadius: 2 }}>
+                <AlertTitle>Viktig informasjon for deg som er miljøarbeider</AlertTitle>
+                <Stack spacing={0.5} component="div">
+                  <Typography variant="body2"><strong>Ikke</strong> bruk navn eller detaljer som kan identifisere personer.</Typography>
+                  <Typography variant="body2">Bruk generelle betegnelser som «Gutten», «Jenta», «Brukeren», «Deltakeren».</Typography>
+                  <Typography variant="body2">Fokuser på aktiviteter og utvikling, ikke identitet. Anonymiser steder ved behov.</Typography>
+                  <Typography variant="caption" color="text.secondary">Dette sikrer GDPR‑etterlevelse og beskytter klientenes personvern.</Typography>
+                </Stack>
+              </Alert>
+            )}
+
             <TextField
               label={`Hvilken timesats har du avtalt med ${projectInfo?.bedrift || 'bedriften'}?`}
               value={onbRateInput}
