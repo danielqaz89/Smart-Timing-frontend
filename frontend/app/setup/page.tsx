@@ -186,6 +186,11 @@ async function saveCompany() {
   }
 }
 
+  // Update browser tab title dynamically (must be before any early return)
+  useEffect(() => {
+    document.title = (tab === 0 ? 'Kom i gang som konsulent' : 'Forespør bedriftstilgang') + ' - Smart Timing';
+  }, [tab]);
+
   if (isLoading) {
     return (
       <Container maxWidth="sm" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
@@ -193,11 +198,6 @@ async function saveCompany() {
       </Container>
     );
   }
-
-  // Update browser tab title dynamically
-  useEffect(() => {
-    document.title = (tab === 0 ? 'Kom i gang som konsulent' : 'Forespør bedriftstilgang') + ' - Smart Timing';
-  }, [tab]);
 
   return (
     <Container maxWidth="sm" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
