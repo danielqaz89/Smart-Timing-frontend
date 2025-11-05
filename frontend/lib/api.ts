@@ -195,6 +195,43 @@ export async function generateMonthlyReport(opts: {
   return res.json();
 }
 
+export async function syncToGoogleSheets(opts: { month: string; userId?: string }) {
+  const { month, userId = 'default' } = opts;
+  const res = await fetch(`${API_BASE}/api/sheets/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ month, user_id: userId }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ error: 'Failed to sync to Google Sheets' }));
+    throw new Error(errorData.error || errorData.message || 'Failed to sync to Google Sheets');
+  }
+  return res.json();
+}
+
+export async function exportUserData(userId = 'default') {
+  const res = await fetch(`${API_BASE}/api/gdpr/export-data`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId }),
+  });
+  if (!res.ok) throw new Error('Failed to export user data');
+  return res.json();
+}
+
+export async function deleteUserAccount(userId = 'default', confirmation: string) {
+  const res = await fetch(`${API_BASE}/api/gdpr/delete-account`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId, confirmation }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ error: 'Failed to delete account' }));
+    throw new Error(errorData.error || errorData.message || 'Failed to delete account');
+  }
+  return res.json();
+}
+
 // ===== USER SETTINGS =====
 export type UserSettings = {
   id?: number;

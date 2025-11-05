@@ -47,7 +47,7 @@ import ArchiveIcon from "@mui/icons-material/Archive";
 import UnarchiveIcon from "@mui/icons-material/Unarchive";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
 import dayjs from "dayjs";
-import { API_BASE, createLog, deleteLog, fetchLogs, createLogsBulk, webhookTestRelay, deleteLogsMonth, deleteLogsAll, updateLog, sendTimesheet, sendTimesheetViaGmail, getGoogleAuthStatus, generateMonthlyReport, archiveLog, unarchiveLog, archiveLogsByMonth, type LogRow } from "../lib/api";
+import { API_BASE, createLog, deleteLog, fetchLogs, createLogsBulk, webhookTestRelay, deleteLogsMonth, deleteLogsAll, updateLog, sendTimesheet, sendTimesheetViaGmail, getGoogleAuthStatus, generateMonthlyReport, archiveLog, unarchiveLog, archiveLogsByMonth, syncToGoogleSheets, exportUserData, deleteUserAccount, type LogRow } from "../lib/api";
 import { exportToPDF } from "../lib/pdfExport";
 import { useThemeMode } from "../components/ThemeRegistry";
 import Brightness4Icon from "@mui/icons-material/Brightness4";
@@ -230,7 +230,7 @@ function CsvImport({ onImported, onToast }: { onImported: () => Promise<void> | 
   );
 }
 
-function WebhookSection({ onImported, onToast, settings, updateSettings }: { onImported: () => Promise<void> | void, onToast: (msg: string, sev?: any) => void, settings: any, updateSettings: any }) {
+function WebhookSection({ onImported, onToast, settings, updateSettings, monthNav }: { onImported: () => Promise<void> | void, onToast: (msg: string, sev?: any) => void, settings: any, updateSettings: any, monthNav: string }) {
   const [busy, setBusy] = useState(false);
   const active = settings?.webhook_active || false;
   const webhookUrl = settings?.webhook_url || '';
@@ -274,18 +274,35 @@ function WebhookSection({ onImported, onToast, settings, updateSettings }: { onI
     }
   }
 
+  async function syncToSheets() {
+    if (!sheetUrl) return;
+    setBusy(true);
+    try {
+      const result = await syncToGoogleSheets({ month: monthNav });
+      onToast(`Synkronisert ${result.rowsAdded || 0} logger til Google Sheets`, "success");
+      await onImported();
+    } catch (e: any) {
+      onToast(`Synkronisering feilet: ${e?.message || e}`, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Stack spacing={2}>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
         <TextField label="Webhook URL" fullWidth value={webhookUrl} onChange={(e) => updateSettings({webhook_url: e.target.value})} />
         <TextField label="Google Sheets URL (valgfritt)" fullWidth value={sheetUrl} onChange={(e) => updateSettings({sheet_url: e.target.value})} />
       </Stack>
-      <Stack direction="row" spacing={2}>
+      <Stack direction="row" spacing={2} flexWrap="wrap">
         <Chip label={active ? "Aktiver synk: På" : "Aktiver synk: Av"} onClick={() => updateSettings({webhook_active: !active})} />
         <Button disabled={!webhookUrl || busy} variant="outlined" onClick={async () => { await sendTest(); onToast("Webhook testrad sendt"); }}>Send testrad</Button>
-        <Button disabled={!sheetUrl || busy} variant="outlined" onClick={importFromSheet}>Importer fra Google Sheets</Button>
+        <Button disabled={!sheetUrl || busy} variant="outlined" onClick={importFromSheet}>Importer FRA Sheets</Button>
+        <Button disabled={!sheetUrl || busy} variant="contained" color="primary" onClick={syncToSheets}>Synkroniser TIL Sheets</Button>
       </Stack>
-      <Typography variant="caption" color="text.secondary">Oppsett lagres i nettleseren. For import må arket være delt "Anyone with the link" eller publisert.</Typography>
+      <Typography variant="caption" color="text.secondary">
+        Import krever at arket er delt "Anyone with the link". Synkronisering krever Google OAuth tilkobling og fungerer kun for Kinoa Tiltak AS.
+      </Typography>
     </Stack>
   );
 }
@@ -1219,30 +1236,66 @@ export default function Home() {
   }
 
   async function handleAddManual() {
-    await createLog({
-      date,
-      start,
-      end,
-      breakHours: Number(breakHours) || 0,
-      expenseCoverage: Number(expenseCoverage) || 0,
-      activity: manualActivity,
-      title: manualTitle || undefined,
-      project: manualProject || undefined,
-      place: manualPlace || undefined,
-      notes: manualNotes || undefined,
-    });
-    // Clear form after submit
-    setDate(dayjs().format("YYYY-MM-DD"));
-    setStart(dayjs().format("HH:mm"));
-    setEnd(dayjs().format("HH:mm"));
-    setBreakHours(0);
-    setExpenseCoverage(0);
-    setManualTitle("");
-    setManualProject("");
-    setManualPlace("");
-    setManualNotes("");
-    await mutate();
-    showToast("Rad lagt til");
+    // Validation
+    if (!dayjs(date, "YYYY-MM-DD", true).isValid()) {
+      showToast("Ugyldig dato format. Bruk YYYY-MM-DD", "error");
+      return;
+    }
+
+    const timePattern = /^\d{2}:\d{2}$/;
+    if (!timePattern.test(start)) {
+      showToast("Ugyldig tidsformat for 'Inn'. Bruk HH:MM", "error");
+      return;
+    }
+    if (!timePattern.test(end)) {
+      showToast("Ugyldig tidsformat for 'Ut'. Bruk HH:MM", "error");
+      return;
+    }
+
+    if (end < start) {
+      showToast("'Ut' må være etter 'Inn'", "error");
+      return;
+    }
+
+    if (breakHours < 0) {
+      showToast("Pause kan ikke være negativ", "error");
+      return;
+    }
+
+    if (expenseCoverage < 0) {
+      showToast("Utgiftsdekning kan ikke være negativ", "error");
+      return;
+    }
+
+    // All validation passed, submit
+    try {
+      await createLog({
+        date,
+        start,
+        end,
+        breakHours: Number(breakHours) || 0,
+        expenseCoverage: Number(expenseCoverage) || 0,
+        activity: manualActivity,
+        title: manualTitle || undefined,
+        project: manualProject || undefined,
+        place: manualPlace || undefined,
+        notes: manualNotes || undefined,
+      });
+      // Clear form after submit
+      setDate(dayjs().format("YYYY-MM-DD"));
+      setStart(dayjs().format("HH:mm"));
+      setEnd(dayjs().format("HH:mm"));
+      setBreakHours(0);
+      setExpenseCoverage(0);
+      setManualTitle("");
+      setManualProject("");
+      setManualPlace("");
+      setManualNotes("");
+      await mutate();
+      showToast("Rad lagt til");
+    } catch (e: any) {
+      showToast(`Feil ved lagring: ${e?.message || e}`, "error");
+    }
   }
 
   async function handleDelete(row: LogRow) {
@@ -1686,7 +1739,16 @@ export default function Home() {
                     helperText={end < start && end !== "" && start !== "" ? "Ut må være etter Inn" : ""}
                   />
                 </Stack>
-                <TextField type="number" label="Pause (timer)" value={breakHours} onChange={(e) => setBreakHours(Number(e.target.value))} fullWidth />
+                <TextField 
+                  type="number" 
+                  label="Pause (timer)" 
+                  value={breakHours} 
+                  onChange={(e) => setBreakHours(Number(e.target.value))} 
+                  fullWidth 
+                  error={breakHours < 0}
+                  helperText={breakHours < 0 ? "Pause kan ikke være negativ" : ""}
+                  InputProps={{ inputProps: { min: 0, step: 0.5 } }}
+                />
                 <TextField 
                   type="number" 
                   label="Utgiftsdekning (kr)" 
@@ -1862,7 +1924,7 @@ export default function Home() {
           <Card>
             <CardHeader title="Google Sheets Webhook (toveis)" />
             <CardContent>
-              <WebhookSection onImported={async () => { await mutate(); }} onToast={showToast} settings={settings} updateSettings={updateSettings} />
+              <WebhookSection onImported={async () => { await mutate(); }} onToast={showToast} settings={settings} updateSettings={updateSettings} monthNav={monthNav} />
             </CardContent>
           </Card>
         </Grid>
