@@ -1241,8 +1241,12 @@ export default function Home() {
     }, 0);
   }, [logs]);
 
-  // Extra expenses added by user (not per-row)
-  const [extraExpenses, setExtraExpenses] = useState<number>(0);
+  // Extra expenses added by user (not per-row), nb-NO formatted input
+  const [extraExpensesInput, setExtraExpensesInput] = useState<string>("");
+  const extraExpenses = useMemo(() => {
+    const n = parseRate(extraExpensesInput);
+    return Number.isFinite(n) ? n : 0;
+  }, [extraExpensesInput]);
   useEffect(() => {
     setCalcBusy(true);
     const t = setTimeout(() => setCalcBusy(false), 150);
@@ -1909,11 +1913,14 @@ export default function Home() {
                 <Typography variant="body2">Utgiftsdekning</Typography>
                 <Typography variant="h6">{totalExpenses.toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
                 <TextField 
-                  type="number"
                   label="Ekstra utgifter (kr)"
-                  value={extraExpenses}
-                  onChange={(e) => setExtraExpenses(Number(e.target.value) || 0)}
-                  inputProps={{ min: 0, step: 10 }}
+                  value={extraExpensesInput}
+                  inputMode="decimal"
+                  onChange={(e) => setExtraExpensesInput(sanitizeRateInput(e.target.value))}
+                  onBlur={() => {
+                    const n = parseRate(extraExpensesInput);
+                    if (!isNaN(n)) setExtraExpensesInput(formatRate(n));
+                  }}
                 />
                 <Typography variant="body2">Total utbetaling</Typography>
                 <Stack direction="row" spacing={1} alignItems="center">
