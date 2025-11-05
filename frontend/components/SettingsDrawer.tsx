@@ -20,15 +20,20 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Dialog,
+  DialogTitle,
+  DialogContent,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import SettingsIcon from "@mui/icons-material/Settings";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import PrivacyTipIcon from "@mui/icons-material/PrivacyTip";
+import FlashOnIcon from "@mui/icons-material/FlashOn";
 import Link from "next/link";
-import { useUserSettings } from "../lib/hooks";
+import { useUserSettings, useQuickTemplates } from "../lib/hooks";
 import { useSnackbar } from "notistack";
 import GoogleSheetsPicker from "./GoogleSheetsPicker";
+import TemplateManager from "./TemplateManager";
 import { getGoogleAuthStatus, initiateGoogleAuth, disconnectGoogleAccount } from "../lib/api";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -54,6 +59,10 @@ export default function SettingsDrawer() {
   const [open, setOpen] = useState(false);
   const { settings, updateSettings: updateSettingsDb, isLoading } = useUserSettings();
   const { enqueueSnackbar } = useSnackbar();
+  
+  // Quick templates
+  const { templates, createTemplate, deleteTemplate } = useQuickTemplates();
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   
   // Form state
   const [paidBreak, setPaidBreak] = useState(false);
@@ -195,6 +204,31 @@ export default function SettingsDrawer() {
                     <Typography variant="caption" color="text.secondary">
                       Ved betalt pause trekkes ikke pausetid fra lønnsberegningen.
                     </Typography>
+                  </Stack>
+                </AccordionDetails>
+              </Accordion>
+
+              {/* Hurtigstempling Maler */}
+              <Accordion>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <FlashOnIcon fontSize="small" />
+                    <Typography variant="h6">Maler for hurtigstempling</Typography>
+                  </Stack>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Stack spacing={1}>
+                    <Typography variant="body2" color="text.secondary">
+                      Opprett maler for aktiviteter du gjør ofte.
+                    </Typography>
+                    {templates.length === 0 && (
+                      <Typography variant="caption" color="text.secondary">
+                        Ingen maler enda. Klikk "Ny mal" i dialogen for å opprette din første mal.
+                      </Typography>
+                    )}
+                    <Button variant="outlined" size="small" onClick={() => setTemplatesOpen(true)}>
+                      Åpne maler
+                    </Button>
                   </Stack>
                 </AccordionDetails>
               </Accordion>
@@ -533,6 +567,19 @@ export default function SettingsDrawer() {
           )}
         </Box>
       </Drawer>
+
+      {/* Templates Dialog */}
+      <Dialog open={templatesOpen} onClose={() => setTemplatesOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Maler for hurtigstempling</DialogTitle>
+        <DialogContent>
+          <TemplateManager
+            templates={templates}
+            onCreate={async (tpl) => { await createTemplate(tpl as any); enqueueSnackbar('Mal lagret', { variant: 'success' }); }}
+            onDelete={async (id) => { await deleteTemplate(id); enqueueSnackbar('Mal slettet', { variant: 'success' }); }}
+            onToast={(msg, sev) => enqueueSnackbar(msg, { variant: sev || 'default' })}
+          />
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

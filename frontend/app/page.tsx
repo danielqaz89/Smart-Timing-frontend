@@ -1000,6 +1000,7 @@ export default function Home() {
   const [manualOpen, setManualOpen] = useState(false);
   const [mobileDialogOpen, setMobileDialogOpen] = useState(false);
   const [mobileDialogContent, setMobileDialogContent] = useState<"stamp-work" | "stamp-meeting" | "manual-entry" | "import" | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   
   // Database-backed settings
   const { settings, updateSettings: updateSettingsDb, mutate: mutateSettings } = useUserSettings();
@@ -1100,10 +1101,17 @@ export default function Home() {
   useEffect(() => { setRateInput(formatRate(rate)); }, [rate]);
   const paidBreak = settings?.paid_break || false;
   const taxPct = Number(settings?.tax_pct) || 35;
-  const monthNav = settings?.month_nav || dayjs().format("YYYYMM");
+  // Month navigation: local state for instant UI, persisted to settings
+  const [monthNavLocal, setMonthNavLocal] = useState<string>(settings?.month_nav || dayjs().format("YYYYMM"));
+  useEffect(() => {
+    if (settings?.month_nav && settings.month_nav !== monthNavLocal) {
+      setMonthNavLocal(settings.month_nav);
+    }
+  }, [settings?.month_nav]);
+
   const [calcBusy, setCalcBusy] = useState(false);
   const getKey = (index: number) => {
-    const m = dayjs(monthNav + "01").subtract(index, "month").format("YYYYMM");
+    const m = dayjs(monthNavLocal + "01").subtract(index, "month").format("YYYYMM");
     return ["logs", m] as const;
   };
   const { data, isLoading, isValidating, mutate, size, setSize } = useSWRInfinite(
@@ -1208,6 +1216,9 @@ export default function Home() {
       return sum + Number(r.expense_coverage || 0);
     }, 0);
   }, [logs]);
+
+  // Extra expenses added by user (not per-row)
+  const [extraExpenses, setExtraExpenses] = useState<number>(0);
   useEffect(() => {
     setCalcBusy(true);
     const t = setTimeout(() => setCalcBusy(false), 150);
@@ -1254,9 +1265,9 @@ export default function Home() {
 
   async function handleArchiveMonth() {
     try {
-      await archiveLogsByMonth(monthNav);
+      await archiveLogsByMonth(monthNavLocal);
       await mutate();
-      showToast(`Alle logger for ${formatMonthLabel(monthNav)} arkivert`, "success");
+      showToast(`Alle logger for ${formatMonthLabel(monthNavLocal)} arkivert`, "success");
     } catch (e: any) {
       showToast(`Arkivering feilet: ${e?.message || e}`, "error");
     }
@@ -1480,12 +1491,20 @@ export default function Home() {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-      if (e.key === "ArrowLeft") updateSettings({month_nav: dayjs(monthNav + "01").subtract(1, "month").format("YYYYMM")});
-      if (e.key === "ArrowRight") updateSettings({month_nav: dayjs(monthNav + "01").add(1, "month").format("YYYYMM")});
+      if (e.key === "ArrowLeft") {
+        const prev = dayjs(monthNavLocal + "01").subtract(1, "month").format("YYYYMM");
+        setMonthNavLocal(prev);
+        updateSettings({month_nav: prev});
+      }
+      if (e.key === "ArrowRight") {
+        const next = dayjs(monthNavLocal + "01").add(1, "month").format("YYYYMM");
+        setMonthNavLocal(next);
+        updateSettings({month_nav: next});
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [monthNav, updateSettings]);
+  }, [monthNavLocal, updateSettings]);
 
   // Setup gate: redirect to /setup if no project info in database
   const router = useRouter();
@@ -1504,18 +1523,19 @@ export default function Home() {
 
   // Initialize month_nav from project periode if not set
   useEffect(() => {
-    if (projectInfo && !hasInitializedMonth && (!monthNav || monthNav === dayjs().format("YYYYMM"))) {
+    if (projectInfo && !hasInitializedMonth && (!monthNavLocal || monthNavLocal === dayjs().format("YYYYMM"))) {
       const periode = projectInfo.periode;
       if (periode) {
         // Try to parse periode like "Desember 2024", "Q1 2025", "Januar 2025", etc.
         const parsed = parsePeriodeToYYYYMM(periode);
-        if (parsed && parsed !== monthNav) {
+        if (parsed && parsed !== monthNavLocal) {
+          setMonthNavLocal(parsed);
           updateSettings({ month_nav: parsed });
         }
       }
       setHasInitializedMonth(true);
     }
-  }, [projectInfo, monthNav, hasInitializedMonth, updateSettings]);
+  }, [projectInfo, monthNavLocal, hasInitializedMonth, updateSettings]);
 
   // Helper to parse periode text to YYYYMM format
   function parsePeriodeToYYYYMM(periode: string): string | null {
@@ -1607,7 +1627,7 @@ export default function Home() {
         className="sr-only" 
         style={{ position: 'absolute', left: '-10000px', width: '1px', height: '1px', overflow: 'hidden' }}
       >
-        {isLoading ? 'Laster data...' : `${logs.length} loggføringer lastet for ${monthNav}`}
+        {isLoading ? 'Laster data...' : `${logs.length} loggføringer lastet for ${monthNavLocal}`}
       </div>
       <MigrationBanner onComplete={() => mutateSettings()} />
       <Stack 
@@ -1632,6 +1652,15 @@ export default function Home() {
               Rapporter
             </Button>
           </Link>
+          <Button 
+            variant="outlined" 
+            size="small"
+            aria-label="Åpne avanserte verktøy"
+            title="Avanserte verktøy"
+            onClick={() => setAdvancedOpen(true)}
+          >
+            Avanserte verktøy
+          </Button>
           <Link href="/setup" passHref legacyBehavior>
             <Button 
               variant="outlined" 
@@ -1725,8 +1754,12 @@ export default function Home() {
                   type="month"
                   label="Periode (Måned)"
                   InputLabelProps={{ shrink: true }}
-                  value={dayjs(monthNav + '01').format('YYYY-MM')}
-                  onChange={(e) => updateSettings({ month_nav: e.target.value.replace(/[^0-9]/g, '').slice(0,6) })}
+                  value={dayjs(monthNavLocal + '01').format('YYYY-MM')}
+                  onChange={(e) => {
+                    const val = (e.target.value || '').replace(/[^0-9-]/g, '');
+                    const yyyymm = val.replace('-', '').slice(0,6);
+                    if (yyyymm.length === 6) { setMonthNavLocal(yyyymm); updateSettings({ month_nav: yyyymm }); }
+                  }}
                   fullWidth
                 />
 
@@ -1745,6 +1778,144 @@ export default function Home() {
                 <Button variant="outlined" onClick={() => setManualOpen(true)} sx={{ width: '100%' }}>
                   Legg til manuelt
                 </Button>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Månedsfilter og nøkkeltall */}
+      <Grid container spacing={2} justifyContent="center" sx={{ mt: 2 }}>
+        <Grid item xs={12} md={8} lg={6} ref={statsRef}>
+          <Card>
+            <CardHeader title="Månedsfilter og nøkkeltall" />
+            <CardContent>
+              <Stack spacing={2}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Button size="small" onClick={() => { const next = dayjs(monthNavLocal+"01").subtract(1, "month").format("YYYYMM"); setMonthNavLocal(next); updateSettings({ month_nav: next }); }}>{"<"}</Button>
+                  <TextField 
+                    type="month"
+                    label="Måned"
+                    InputLabelProps={{ shrink: true }}
+                    value={dayjs(monthNavLocal + '01').format('YYYY-MM')}
+                    onChange={(e) => {
+                      const val = (e.target.value || '').replace(/[^0-9-]/g, '');
+                      const yyyymm = val.replace('-', '').slice(0,6);
+                      if (yyyymm.length === 6) { setMonthNavLocal(yyyymm); updateSettings({ month_nav: yyyymm }); }
+                    }}
+                  />
+                  <Button size="small" onClick={() => { const next = dayjs(monthNavLocal+"01").add(1, "month").format("YYYYMM"); setMonthNavLocal(next); updateSettings({ month_nav: next }); }}>{">"}</Button>
+                </Stack>
+                <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
+                  <Chip 
+                    label="Uke"
+                    size="small" 
+                    onClick={() => updateViewMode('week')}
+                    color={viewMode === 'week' ? "primary" : "default"}
+                    variant={viewMode === 'week' ? "filled" : "outlined"}
+                  />
+                  <Chip 
+                    label="Måned"
+                    size="small" 
+                    onClick={() => updateViewMode('month')}
+                    color={viewMode === 'month' ? "primary" : "default"}
+                    variant={viewMode === 'month' ? "filled" : "outlined"}
+                  />
+                  <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+                  <Chip 
+                    label="Denne måneden" 
+                    size="small" 
+                    onClick={() => { updateViewMode('month'); const cur = dayjs().format("YYYYMM"); setMonthNavLocal(cur); updateSettings({month_nav: cur}); }}
+                    color={monthNavLocal === dayjs().format("YYYYMM") ? "primary" : "default"}
+                  />
+                  <Chip 
+                    label="Forrige måned" 
+                    size="small" 
+                    onClick={() => { updateViewMode('month'); const prev = dayjs().subtract(1, "month").format("YYYYMM"); setMonthNavLocal(prev); updateSettings({month_nav: prev}); }}
+                    color={monthNavLocal === dayjs().subtract(1, "month").format("YYYYMM") ? "primary" : "default"}
+                  />
+                  <Chip 
+                    label="Dette året" 
+                    size="small" 
+                    onClick={() => { updateViewMode('month'); const start = dayjs().startOf("year").format("YYYYMM"); setMonthNavLocal(start); updateSettings({month_nav: start}); }}
+                  />
+                </Stack>
+                <Divider />
+                <Typography variant="body2">Totale timer (man–fre)</Typography>
+                <Typography variant="h4">{totalHours.toFixed(2)}</Typography>
+                <Stack direction="row" spacing={2}>
+                  <Box>
+                    <Typography variant="body2">Arbeid</Typography>
+                    <Typography variant="h6">{logs.filter(l => l.activity === "Work").length}</Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="body2">Møter</Typography>
+                    <Typography variant="h6">{logs.filter(l => l.activity === "Meeting").length}</Typography>
+                  </Box>
+                </Stack>
+                <Divider />
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Chip label={paidBreak ? "Betalt pause" : "Ubetalt pause"} onClick={() => updateSettings({paid_break: !paidBreak})} />
+                  <Typography variant="caption" color="text.secondary">Ved betalt pause trekkes ikke pause fra timene.</Typography>
+                </Stack>
+                <TextField
+                  label="Timesats (kr/t)"
+                  value={rateInput}
+                  inputMode="decimal"
+                  onChange={(e) => {
+                    const v = sanitizeRateInput(e.target.value);
+                    setRateInput(v);
+                    const n = parseRate(v);
+                    if (!isNaN(n)) updateSettings({ hourly_rate: n });
+                  }}
+                  onBlur={() => setRateInput(formatRate(rate))}
+                />
+                <Typography variant="body2">Estimert lønn (man–fre)</Typography>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  {calcBusy && <CircularProgress size={16} />}
+                  <Typography variant="h5">{(rate * totalHours).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
+                </Stack>
+                <Typography variant="body2">Utgiftsdekning</Typography>
+                <Typography variant="h6">{totalExpenses.toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
+                <TextField 
+                  type="number"
+                  label="Ekstra utgifter (kr)"
+                  value={extraExpenses}
+                  onChange={(e) => setExtraExpenses(Number(e.target.value) || 0)}
+                  inputProps={{ min: 0, step: 10 }}
+                />
+                <Typography variant="body2">Total utbetaling</Typography>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  {calcBusy && <CircularProgress size={16} />}
+                  <Typography variant="h5" color="primary">{(rate * totalHours + totalExpenses + extraExpenses).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
+                </Stack>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
+                  <FormControl sx={{ minWidth: 160 }}>
+                    <InputLabel>Skatteprosent</InputLabel>
+                    <Select
+                      label="Skatteprosent"
+                      value={String(taxPct)}
+                      onChange={(e) => { updateSettings({tax_pct: Number(e.target.value)}); showToast("Skatteprosent oppdatert"); }}
+                    >
+                      {[20,25,30,35,40,45,50].map(p => (
+                        <MenuItem key={p} value={String(p)}>{p}%</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <Box>
+                    <Typography variant="body2">Sett av til skatt</Typography>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      {calcBusy && <CircularProgress size={14} />}
+                      <Typography variant="h6">{(rate * totalHours * (taxPct/100)).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
+                    </Stack>
+                  </Box>
+                </Stack>
+                <Divider />
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                  <Button variant="outlined" color="info" startIcon={<Inventory2Icon />} onClick={handleArchiveMonth}>Arkiver denne måneden</Button>
+                  <Button variant="outlined" color="warning" onClick={async () => { await deleteLogsMonth(dayjs().format("YYYYMM")); showToast("Denne måneden nullstilt", "success"); await mutate(); }}>Nullstill denne måneden</Button>
+                  <Button variant="outlined" color="error" onClick={async () => { if (confirm("Sikker på at du vil slette hele datasettet?")) { await deleteLogsAll(); showToast("Hele datasettet er nullstilt", "success"); await mutate(); } }}>Nullstill hele datasettet</Button>
+                </Stack>
               </Stack>
             </CardContent>
           </Card>
@@ -1772,7 +1943,7 @@ export default function Home() {
           <Card>
             <CardHeader title="Google Sheets Webhook (toveis)" />
             <CardContent>
-              <WebhookSection onImported={async () => { await mutate(); }} onToast={showToast} settings={settings} updateSettings={updateSettings} monthNav={monthNav} />
+              <WebhookSection onImported={async () => { await mutate(); }} onToast={showToast} settings={settings} updateSettings={updateSettings} monthNav={monthNavLocal} />
             </CardContent>
           </Card>
         </Grid>
@@ -1788,7 +1959,7 @@ export default function Home() {
           <Card>
             <CardHeader title="Send inn timeliste" />
             <CardContent>
-              <SendTimesheet month={monthNav} onToast={showToast} settings={settings} updateSettings={updateSettings} />
+              <SendTimesheet month={monthNavLocal} onToast={showToast} settings={settings} updateSettings={updateSettings} />
             </CardContent>
           </Card>
         </Grid>
@@ -1796,7 +1967,7 @@ export default function Home() {
           <Card>
             <CardHeader title="Skriv en rapport for måneden" />
             <CardContent>
-              <ReportGenerator month={monthNav} onToast={showToast} />
+              <ReportGenerator month={monthNavLocal} onToast={showToast} />
             </CardContent>
           </Card>
         </Grid>
@@ -1805,7 +1976,7 @@ export default function Home() {
       <Box mt={3} ref={logsRef}>
         <Card>
           <CardHeader 
-            title={`Logg for ${formatMonthLabel(monthNav)}`}
+            title={`Logg for ${formatMonthLabel(monthNavLocal)}`}
             action={
               <Stack direction="row" spacing={1} alignItems="center">
                 <Stack direction="row" spacing={0.5} alignItems="center">
@@ -1840,7 +2011,7 @@ export default function Home() {
                 <Button 
                   variant="outlined" 
                   size="small" 
-                  onClick={() => exportToPDF(allLogs, monthNav, projectInfo, settings)}
+                  onClick={() => exportToPDF(allLogs, monthNavLocal, projectInfo, settings)}
                   disabled={allLogs.length === 0}
                 >
                   Eksporter PDF
@@ -2077,6 +2248,31 @@ export default function Home() {
               Legg til
             </Button>
           </Stack>
+        </DialogContent>
+      </Dialog>
+
+      {/* Avanserte verktøy (Dialog) */}
+      <Dialog open={advancedOpen} onClose={() => setAdvancedOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Avanserte verktøy</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={6}>
+              <Card>
+                <CardHeader title="Importer timeplan (CSV)" />
+                <CardContent>
+                  <CsvImport onImported={async () => { await mutate(); }} onToast={showToast} />
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Card>
+                <CardHeader title="Google Sheets Webhook (toveis)" />
+                <CardContent>
+                  <WebhookSection onImported={async () => { await mutate(); }} onToast={showToast} settings={settings} updateSettings={updateSettings} monthNav={monthNavLocal} />
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
         </DialogContent>
       </Dialog>
     </Container>
