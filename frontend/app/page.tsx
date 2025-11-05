@@ -2001,30 +2001,6 @@ export default function Home() {
 
       <Grid container spacing={2} sx={{ mt: 1 }}>
         <Grid item xs={12}>
-          <TemplateManager
-            templates={templates}
-            onCreate={createTemplate}
-            onDelete={deleteTemplate}
-            onToast={showToast}
-          />
-        </Grid>
-        <Grid item xs={12} ref={importRef}>
-          <Card>
-            <CardHeader title="Importer timeplan (CSV)" />
-            <CardContent>
-              <CsvImport onImported={async () => { await mutate(); }} onToast={showToast} />
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12}>
-          <Card>
-            <CardHeader title="Google Sheets Webhook (toveis)" />
-            <CardContent>
-              <WebhookSection onImported={async () => { await mutate(); }} onToast={showToast} settings={settings} updateSettings={updateSettings} monthNav={monthNavLocal} />
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12}>
           <Card>
             <CardHeader title="Legg inn hverdager for måned" />
             <CardContent>
