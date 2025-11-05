@@ -34,6 +34,7 @@ import {
   Checkbox,
   FormGroup,
   FormControlLabel,
+  Skeleton,
 } from "@mui/material";
 import { useSnackbar } from "notistack";
 import SettingsDrawer from "../components/SettingsDrawer";
@@ -1253,6 +1254,17 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [taxPct, rate, paidBreak, logs]);
 
+  // Only show skeleton if busy persists to avoid flicker
+  const [showCalcSkeleton, setShowCalcSkeleton] = useState(false);
+  useEffect(() => {
+    if (calcBusy) {
+      const h = setTimeout(() => setShowCalcSkeleton(true), 400);
+      return () => { clearTimeout(h); setShowCalcSkeleton(false); };
+    } else {
+      setShowCalcSkeleton(false);
+    }
+  }, [calcBusy]);
+
   async function handleQuickStamp() {
     await createLog({
       date: dayjs().format("YYYY-MM-DD"),
@@ -1907,8 +1919,11 @@ export default function Home() {
                 />
                 <Typography variant="body2">Estimert lønn (man–fre)</Typography>
                 <Stack direction="row" spacing={1} alignItems="center">
-                  {calcBusy && <CircularProgress size={16} />}
-                  <Typography variant="h5">{(rate * totalHours).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
+                  {showCalcSkeleton ? (
+                    <Skeleton variant="text" width={140} height={32} />
+                  ) : (
+                    <Typography variant="h5">{(rate * totalHours).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
+                  )}
                 </Stack>
                 <Typography variant="body2">Utgiftsdekning</Typography>
                 <Typography variant="h6">{totalExpenses.toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
@@ -1924,8 +1939,11 @@ export default function Home() {
                 />
                 <Typography variant="body2">Total utbetaling</Typography>
                 <Stack direction="row" spacing={1} alignItems="center">
-                  {calcBusy && <CircularProgress size={16} />}
-                  <Typography variant="h5" color="primary">{(rate * totalHours + totalExpenses + extraExpenses).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
+                  {showCalcSkeleton ? (
+                    <Skeleton variant="text" width={180} height={32} />
+                  ) : (
+                    <Typography variant="h5" color="primary">{(rate * totalHours + totalExpenses + extraExpenses).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
+                  )}
                 </Stack>
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
                   <FormControl sx={{ minWidth: 160 }}>
@@ -1943,8 +1961,11 @@ export default function Home() {
                   <Box>
                     <Typography variant="body2">Sett av til skatt</Typography>
                     <Stack direction="row" spacing={1} alignItems="center">
-                      {calcBusy && <CircularProgress size={14} />}
-                      <Typography variant="h6">{(rate * totalHours * (taxPct/100)).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
+                      {showCalcSkeleton ? (
+                        <Skeleton variant="text" width={120} height={28} />
+                      ) : (
+                        <Typography variant="h6">{(rate * totalHours * (taxPct/100)).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
+                      )}
                     </Stack>
                   </Box>
                 </Stack>
