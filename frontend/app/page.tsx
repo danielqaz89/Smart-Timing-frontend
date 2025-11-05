@@ -2002,14 +2002,6 @@ export default function Home() {
       <Grid container spacing={2} sx={{ mt: 1 }}>
         <Grid item xs={12}>
           <Card>
-            <CardHeader title="Legg inn hverdager for måned" />
-            <CardContent>
-              <MonthBulk onDone={async () => { await mutate(); }} onToast={showToast} />
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12}>
-          <Card>
             <CardHeader title="Send inn timeliste" />
             <CardContent>
               <SendTimesheet month={monthNavLocal} onToast={showToast} settings={settings} updateSettings={updateSettings} />
