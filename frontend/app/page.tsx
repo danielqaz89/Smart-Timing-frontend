@@ -2068,7 +2068,7 @@ export default function Home() {
             </Stack>
             <div style={{ height: 360, overflow: 'auto' }} ref={parentRef}>
               <Table size="small" sx={{ minWidth: 900 }}>
-                <TableHead>
+                <TableHead sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: 'background.paper' }}>
                 <TableRow>
                   {bulkMode && <TableCell padding="checkbox" />}
                   <TableCell>Dag</TableCell>
@@ -2091,7 +2091,7 @@ export default function Home() {
                     const r = logs[vi.index];
                     return (
                       <div key={r.id} style={{ position: 'absolute', top: vi.start, left: 0, right: 0 }}>
-                        <TableRow hover>
+                        <TableRow hover sx={{ bgcolor: vi.index % 2 ? 'action.hover' : undefined }}>
                           {bulkMode && editingId !== r.id && (
                             <TableCell padding="checkbox">
                               <input 
@@ -2135,11 +2135,21 @@ export default function Home() {
                               <TableCell>{r.start_time?.slice(0,5)}</TableCell>
                               <TableCell>{r.end_time?.slice(0,5)}</TableCell>
                               <TableCell>{r.break_hours}</TableCell>
-                              <TableCell>{r.activity}</TableCell>
-                              <TableCell>{r.title}</TableCell>
-                              <TableCell>{r.project}</TableCell>
-                              <TableCell>{r.place}</TableCell>
-                              <TableCell>{r.notes}</TableCell>
+                              <TableCell>
+                                <Chip label={r.activity === 'Work' ? 'Arbeid' : 'Møte'} size="small" color={r.activity === 'Work' ? 'primary' : 'secondary'} />
+                              </TableCell>
+                              <TableCell>
+                                <Typography noWrap title={r.title || ''}>{r.title}</Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography noWrap title={r.project || ''}>{r.project}</Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography noWrap title={r.place || ''}>{r.place}</Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography noWrap title={r.notes || ''}>{r.notes}</Typography>
+                              </TableCell>
                               <TableCell align="right">{r.expense_coverage ? `${Number(r.expense_coverage).toLocaleString('no-NO')} kr` : '—'}</TableCell>
                               <TableCell align="right">
                                 <IconButton aria-label="Rediger rad" size="small" onClick={() => startEdit(r)}><EditIcon fontSize="small" /></IconButton>
