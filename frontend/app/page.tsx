@@ -1021,6 +1021,7 @@ export default function Home() {
   const { settings, updateSettings: updateSettingsDb, mutate: mutateSettings } = useUserSettings();
   const { templates, createTemplate, deleteTemplate } = useQuickTemplates();
   const { projectInfo, isLoading: projectLoading } = useProjectInfo();
+  const canAddWeekends = useMemo(() => (projectInfo?.tiltak || '').toLowerCase().includes('miljøarbeider'), [projectInfo?.tiltak]);
   
   // Wrapper to update settings with toast
   const updateSettings = async (partial: any) => {
@@ -2371,12 +2372,21 @@ export default function Home() {
             />
 
             <Box>
-              <Typography variant="subtitle2" gutterBottom>Hvordan er arbeidsdagen din (man–fre)?</Typography>
+              <Typography variant="subtitle2" gutterBottom>Hvordan er arbeidsdagen din?</Typography>
               <FormGroup row>
                 {[1,2,3,4,5].map(d => (
-                  <FormControlLabel key={d} control={<Checkbox checked={!!onbDays[d]} onChange={(e) => setOnbDays({ ...onbDays, [d]: e.target.checked })} />} label={["","Man","Tir","Ons","Tor","Fre"][d]} />
+                  <FormControlLabel key={d} control={<Checkbox checked={!!onbDays[d]} onChange={(e) => setOnbDays({ ...onbDays, [d]: e.target.checked })} />} label={["Man","Tir","Ons","Tor","Fre"][d-1]} />
                 ))}
+                {canAddWeekends && (
+                  <>
+                    <FormControlLabel control={<Checkbox checked={!!onbDays[6]} onChange={(e) => setOnbDays({ ...onbDays, 6: e.target.checked })} />} label="Lør" />
+                    <FormControlLabel control={<Checkbox checked={!!onbDays[0]} onChange={(e) => setOnbDays({ ...onbDays, 0: e.target.checked })} />} label="Søn" />
+                  </>
+                )}
               </FormGroup>
+              {canAddWeekends && (
+                <Typography variant="caption" color="text.secondary">Som miljøarbeider i bolig kan helger også legges til.</Typography>
+              )}
             </Box>
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
