@@ -369,6 +369,10 @@ export type CompanyRecord = {
   orgnr?: string;
   contact_email?: string;
   contact_phone?: string;
+  // Optional address fields (from BRREG)
+  address_line?: string;
+  postal_code?: string;
+  city?: string;
   logo_base64?: string | null;
   display_order?: number;
 };
@@ -381,5 +385,26 @@ export async function createOrUpdateCompany(company: CompanyRecord) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error || 'Failed to save company');
+  return data;
+}
+
+// Submit a company request to admin for review/approval
+export async function submitCompanyRequest(company: CompanyRecord & { requester_email?: string }) {
+  // Try admin endpoint first
+  let res = await fetch(`${API_BASE}/api/admin/company-requests`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(company),
+  });
+  if (res.status === 404) {
+    // Fallback public endpoint
+    res = await fetch(`${API_BASE}/api/company-requests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(company),
+    });
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || data?.message || 'Failed to submit company request');
   return data;
 }

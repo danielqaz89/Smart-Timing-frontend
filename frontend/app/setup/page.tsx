@@ -1,16 +1,17 @@
 "use client";
 import { useState, useEffect, ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Box, Button, Card, CardContent, CardHeader, Container, Stack, TextField, Typography, CircularProgress, Autocomplete, Fade, Tabs, Tab } from "@mui/material";
+import { Box, Button, Card, CardContent, CardHeader, Container, Stack, TextField, Typography, CircularProgress, Autocomplete, Fade, Tabs, Tab, Tooltip, InputAdornment } from "@mui/material";
 import GroupIcon from '@mui/icons-material/Group';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import SportsIcon from '@mui/icons-material/Sports';
 import NatureIcon from '@mui/icons-material/Nature';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import Image from "next/image";
 import { useProjectInfo } from "../../lib/hooks";
 import { searchBrregCompany, getBrregCompanyByOrgnr, KINOA_TILTAK_AS, type BrregCompany } from "../../lib/brreg";
-import { createOrUpdateCompany } from "../../lib/api";
+import { createOrUpdateCompany, submitCompanyRequest } from "../../lib/api";
 
 interface Company {
   id: number;
@@ -37,6 +38,9 @@ export default function Setup() {
     orgnr: "",
     email: "",
     phone: "",
+    address: "",
+    postalCode: "",
+    city: "",
   });
   const [saving, setSaving] = useState(false);
   // BRREG (konsulent)
@@ -164,16 +168,19 @@ async function saveCompany() {
   }
   setSaving(true);
   try {
-    await createOrUpdateCompany({
+    await submitCompanyRequest({
       name: companyForm.name,
       orgnr: companyForm.orgnr.replace(/\s/g, ''),
       contact_email: companyForm.email || undefined,
       contact_phone: companyForm.phone || undefined,
+      address_line: companyForm.address || undefined,
+      postal_code: companyForm.postalCode || undefined,
+      city: companyForm.city || undefined,
     });
-    router.replace('/admin/companies');
+    alert('Forespørsel sendt til admin. Du får beskjed når den er behandlet.');
   } catch (e) {
-    console.error('Failed to save company:', e);
-    alert('Kunne ikke lagre bedrift. Prøv igjen.');
+    console.error('Failed to submit company request:', e);
+    alert('Kunne ikke sende forespørsel. Prøv igjen.');
   } finally {
     setSaving(false);
   }
@@ -348,6 +355,15 @@ return (
                 onChange={(e)=>setForm({ ...form, klientId: e.target.value })} 
                 fullWidth
                 aria-label="Klient ID eller saksnummer"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title="Du vil få tildelt et Klient ID/Saks nr fra din tiltaksleder">
+                        <HelpOutlineIcon fontSize="small" color="action" />
+                      </Tooltip>
+                    </InputAdornment>
+                  )
+                }}
               />
               <Typography variant="caption" color="text.secondary">
                 E-postinnstillinger konfigureres i hovedvinduet under innstillinger.
@@ -366,6 +382,31 @@ return (
 
           {tab === 1 && (
             <Stack spacing={2}>
+              <TextField
+                label="Organisasjonsnummer"
+                value={companyForm.orgnr}
+                onChange={(e) => setCompanyForm({ ...companyForm, orgnr: e.target.value })}
+                onBlur={async () => {
+                  const c = companyForm.orgnr.replace(/\s/g, '');
+                  if (/^\d{9}$/.test(c)) {
+                    const data = await getBrregCompanyByOrgnr(c);
+                    if (data) {
+                      setCompanyForm((f) => ({
+                        ...f,
+                        name: data.navn || f.name,
+                        address: (data.forretningsadresse?.adresse?.join(', ') || ''),
+                        postalCode: data.forretningsadresse?.postnummer || '',
+                        city: data.forretningsadresse?.poststed || '',
+                      }));
+                    }
+                  }
+                }}
+                placeholder="9 siffer"
+                fullWidth
+                required
+                helperText="Skriv org.nr og gå ut av feltet for å hente fra BRREG"
+              />
+
               <Autocomplete
                 freeSolo
                 options={companyBrregOptions}
@@ -374,7 +415,14 @@ return (
                 onInputChange={(_, newValue) => setCompanyForm({ ...companyForm, name: newValue })}
                 onChange={(_, newValue) => {
                   if (typeof newValue === 'object' && newValue) {
-                    setCompanyForm({ ...companyForm, name: newValue.navn, orgnr: newValue.organisasjonsnummer });
+                    setCompanyForm({
+                      ...companyForm,
+                      name: newValue.navn,
+                      orgnr: newValue.organisasjonsnummer,
+                      address: (newValue.forretningsadresse?.adresse?.join(', ') || ''),
+                      postalCode: newValue.forretningsadresse?.postnummer || '',
+                      city: newValue.forretningsadresse?.poststed || '',
+                    });
                   }
                 }}
                 loading={companyBrregLoading}
@@ -405,21 +453,27 @@ return (
                 )}
               />
 
+              {/* Auto-fylte adressefelt fra BRREG */}
               <TextField
-                label="Organisasjonsnummer"
-                value={companyForm.orgnr}
-                onChange={(e) => setCompanyForm({ ...companyForm, orgnr: e.target.value })}
-                onBlur={async () => {
-                  const c = companyForm.orgnr.replace(/\s/g, '');
-                  if (c && c.length >= 7) {
-                    const data = await getBrregCompanyByOrgnr(c);
-                    if (data?.navn) setCompanyForm((f) => ({ ...f, name: data.navn }));
-                  }
-                }}
-                placeholder="9 siffer"
+                label="Adresse"
+                value={companyForm.address}
+                onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
                 fullWidth
-                required
               />
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                <TextField
+                  label="Postnummer"
+                  value={companyForm.postalCode}
+                  onChange={(e) => setCompanyForm({ ...companyForm, postalCode: e.target.value })}
+                  sx={{ flex: 1 }}
+                />
+                <TextField
+                  label="Poststed"
+                  value={companyForm.city}
+                  onChange={(e) => setCompanyForm({ ...companyForm, city: e.target.value })}
+                  sx={{ flex: 2 }}
+                />
+              </Stack>
 
               <TextField
                 label="E-post"
@@ -440,10 +494,10 @@ return (
                 onClick={saveCompany}
                 disabled={saving || !companyForm.name || !companyForm.orgnr}
               >
-                {saving ? <CircularProgress size={24} /> : 'Lagre bedrift'}
+                {saving ? <CircularProgress size={24} /> : 'Send forespørsel'}
               </Button>
               <Typography variant="caption" color="text.secondary">
-                Lagres i Admin &rarr; Companies.
+                Forespørselen sendes til admin for godkjenning.
               </Typography>
             </Stack>
           )}
