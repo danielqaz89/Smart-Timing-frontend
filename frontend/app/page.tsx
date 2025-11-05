@@ -30,6 +30,10 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogActions,
+  Checkbox,
+  FormGroup,
+  FormControlLabel,
 } from "@mui/material";
 import { useSnackbar } from "notistack";
 import SettingsDrawer from "../components/SettingsDrawer";
@@ -1001,6 +1005,16 @@ export default function Home() {
   const [mobileDialogOpen, setMobileDialogOpen] = useState(false);
   const [mobileDialogContent, setMobileDialogContent] = useState<"stamp-work" | "stamp-meeting" | "manual-entry" | "import" | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Onboarding
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onbRateInput, setOnbRateInput] = useState("");
+  const [onbStart, setOnbStart] = useState("09:00");
+  const [onbEnd, setOnbEnd] = useState("17:00");
+  const [onbDays, setOnbDays] = useState<{ [k: number]: boolean }>({ 1: true, 2: true, 3: true, 4: true, 5: true });
+  const [onbApplyNow, setOnbApplyNow] = useState(false);
+  const [onbBusy, setOnbBusy] = useState(false);
+  const [onbChecked, setOnbChecked] = useState(false);
   
   // Database-backed settings
   const { settings, updateSettings: updateSettingsDb, mutate: mutateSettings } = useUserSettings();
@@ -1097,6 +1111,16 @@ export default function Home() {
 
   // Settings from database with fallbacks
   const rate = settings?.hourly_rate || 0;
+  // Open onboarding once if not completed
+  useEffect(() => {
+    if (!onbChecked && settings && projectInfo !== undefined) {
+      setOnbChecked(true);
+      if (!settings.onboarding_done) {
+        setOnbRateInput(formatRate(rate));
+        setOnboardingOpen(true);
+      }
+    }
+  }, [settings, projectInfo, rate, onbChecked]);
   const [rateInput, setRateInput] = useState<string>("");
   useEffect(() => { setRateInput(formatRate(rate)); }, [rate]);
   const paidBreak = settings?.paid_break || false;
@@ -2273,6 +2297,86 @@ export default function Home() {
               </Card>
             </Grid>
           </Grid>
+        </DialogContent>
+      </Dialog>
+
+      {/* Onboarding (first time) */}
+      <Dialog open={onboardingOpen} onClose={() => setOnboardingOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Velkommen til Smart Timing</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Slik setter du opp din Smart Timing-løsning. Du kan endre dette senere i Innstillinger.
+            </Typography>
+
+            <TextField
+              label={`Hvilken timesats har du avtalt med ${projectInfo?.bedrift || 'bedriften'}?`}
+              value={onbRateInput}
+              onChange={(e) => setOnbRateInput(e.target.value)}
+              onBlur={() => {
+                const n = parseRate(onbRateInput);
+                if (!isNaN(n)) setOnbRateInput(formatRate(n));
+              }}
+              inputMode="decimal"
+              placeholder="f.eks. 500,00"
+              fullWidth
+            />
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>Hvordan er arbeidsdagen din (man–fre)?</Typography>
+              <FormGroup row>
+                {[1,2,3,4,5].map(d => (
+                  <FormControlLabel key={d} control={<Checkbox checked={!!onbDays[d]} onChange={(e) => setOnbDays({ ...onbDays, [d]: e.target.checked })} />} label={["","Man","Tir","Ons","Tor","Fre"][d]} />
+                ))}
+              </FormGroup>
+            </Box>
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField type="time" label="Inn (klokkeslett)" InputLabelProps={{ shrink: true }} value={onbStart} onChange={(e) => setOnbStart(e.target.value)} fullWidth />
+              <TextField type="time" label="Ut (klokkeslett)" InputLabelProps={{ shrink: true }} value={onbEnd} onChange={(e) => setOnbEnd(e.target.value)} fullWidth />
+            </Stack>
+
+            <FormControlLabel
+              control={<Checkbox checked={onbApplyNow} onChange={(e) => setOnbApplyNow(e.target.checked)} />}
+              label="Ønsker du at alle valgte hverdager legges inn for denne måneden nå?"
+            />
+
+            <Stack direction="row" spacing={1}>
+              <Button onClick={async () => {
+                // Skip (mark done)
+                await updateSettings({ onboarding_done: true });
+                setOnboardingOpen(false);
+              }}>Hopp over</Button>
+              <Button variant="contained" disabled={onbBusy} onClick={async () => {
+                setOnbBusy(true);
+                try {
+                  // Save rate
+                  const n = parseRate(onbRateInput);
+                  if (!isNaN(n)) await updateSettings({ hourly_rate: n });
+                  // Mark onboarding done
+                  await updateSettings({ onboarding_done: true });
+                  // Optionally insert weekdays
+                  if (onbApplyNow) {
+                    const base = dayjs(monthNavLocal + "01");
+                    const days = base.daysInMonth();
+                    const rows: any[] = [];
+                    for (let d = 1; d <= days; d++) {
+                      const dd = base.date(d);
+                      const dow = dd.day();
+                      if (onbDays[dow]) {
+                        rows.push({ date: dd.format('YYYY-MM-DD'), start: onbStart, end: onbEnd, breakHours: 0, activity: 'Work' });
+                      }
+                    }
+                    if (rows.length) await createLogsBulk(rows);
+                    await mutate();
+                  }
+                  setOnboardingOpen(false);
+                } finally {
+                  setOnbBusy(false);
+                }
+              }}>Fullfør</Button>
+            </Stack>
+          </Stack>
         </DialogContent>
       </Dialog>
     </Container>
