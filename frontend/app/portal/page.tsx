@@ -10,28 +10,19 @@ function AuditCard() {
   const { fetchWithAuth } = useCompany();
   const [logs, setLogs] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [action, setAction] = React.useState('');
-  const [actor, setActor] = React.useState('');
-  const [q, setQ] = React.useState('');
-  React.useEffect(() => { (async ()=>{ const url = new URL(`${API_BASE}/api/company/audit`); if (action) url.searchParams.set('action', action); if (actor) url.searchParams.set('actor', actor); if (q) url.searchParams.set('q', q); const res = await fetchWithAuth(url.toString()); const d = await res.json(); if (res.ok) setLogs(d.logs||[]); setLoading(false); })(); }, [action, actor, q]);
+  React.useEffect(() => { (async ()=>{ const res = await fetchWithAuth(`${API_BASE}/api/company/audit`); const d = await res.json(); if (res.ok) setLogs(d.logs||[]); setLoading(false); })(); }, []);
   return (
     <Card>
       <CardHeader title="Audit logg" subheader="Siste 100 hendelser" />
       <CardContent>
-        <Stack direction={{ xs:'column', md:'row' }} spacing={2} sx={{ mb:2 }}>
-          <TextField size="small" label="Action" value={action} onChange={(e)=>setAction(e.target.value)} />
-          <TextField size="small" label="Actor e‑post" value={actor} onChange={(e)=>setActor(e.target.value)} />
-          <TextField size="small" label="Søk" value={q} onChange={(e)=>setQ(e.target.value)} />
-          <Button size="small" variant="outlined" onClick={async ()=>{ const res = await fetchWithAuth(`${API_BASE}/api/company/audit/export?format=csv`); const blob = await res.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download='company_audit.csv'; a.click(); URL.revokeObjectURL(url); }}>Eksporter CSV</Button>
-        </Stack>
         {loading ? <CircularProgress size={20} /> : logs.length === 0 ? (
           <Typography variant="body2" color="text.secondary">Ingen hendelser.</Typography>
         ) : (
           <Stack spacing={1}>
             {logs.map((l:any)=>(
               <Box key={l.id} sx={{ p:1, border:'1px solid', borderColor:'divider', borderRadius:1 }}>
-                <Typography variant="caption" color="text.secondary">{new Date(l.created_at).toLocaleString()} • {l.actor_email || 'system'} • {l.ip_address}</Typography>
-                <Typography variant="body2"><strong>{l.action}</strong> on {l.target_type || ''} {l.target_id || ''}</Typography>
+                <Typography variant="caption" color="text.secondary">{new Date(l.created_at).toLocaleString()} • {l.actor_email || 'system'}</Typography>
+                <Typography variant="body2"><strong>{l.action}</strong> {l.target_type ? `• ${l.target_type}` : ''} {l.target_id || ''}</Typography>
                 {l.details && <Typography variant="caption" sx={{ display:'block' }}>{JSON.stringify(l.details)}</Typography>}
               </Box>
             ))}
