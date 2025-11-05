@@ -406,6 +406,14 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
   const [showComposer, setShowComposer] = useState(false);
   const [customIntro, setCustomIntro] = useState('');
   const [customNotes, setCustomNotes] = useState('');
+  // Structured sections (Miljøarbeider)
+  const [bgTiltak, setBgTiltak] = useState('');
+  const [arbeidTiltak, setArbeidTiltak] = useState('');
+  const [utviklingEndring, setUtviklingEndring] = useState('');
+  const [utfordringer, setUtfordringer] = useState('');
+  const [interesserPavirkn, setInteresserPavirkn] = useState('');
+  const [fagligVurdering, setFagligVurdering] = useState('');
+  const [anbefalinger, setAnbefalinger] = useState('');
   const [detectedNames, setDetectedNames] = useState<string[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [previewChanges, setPreviewChanges] = useState<{ original: string; corrected: string; replacements: Array<{ from: string; to: string }> }>({ original: '', corrected: '', replacements: [] });
@@ -560,11 +568,26 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
   async function handleGenerateReport() {
     setBusy(true);
     try {
+      // Build combined notes (append structured sections)
+      const sections: string[] = [];
+      if ((template === 'miljøarbeider' || template === 'auto')) {
+        const s = [
+          { h: 'Arbeid og tiltak som er gjennomført', v: arbeidTiltak },
+          { h: 'Utvikling og endring siden oppstart', v: utviklingEndring },
+          { h: 'Nåværende utfordringer', v: utfordringer },
+          { h: 'Interesser og påvirkningsfaktorer', v: interesserPavirkn },
+          { h: 'Faglig vurdering', v: fagligVurdering },
+          { h: 'Anbefalinger videre', v: anbefalinger },
+        ];
+        s.forEach(({h,v}) => { if ((v||'').trim()) sections.push(`## ${h}\n${v.trim()}`); });
+      }
+      const combinedNotes = [customNotes.trim(), ...sections].filter(Boolean).join('\n\n') || undefined;
+
       const result = await generateMonthlyReport({
         month,
         template,
-        customIntro: customIntro.trim() || undefined,
-        customNotes: customNotes.trim() || undefined,
+        customIntro: customIntro.trim() || (bgTiltak.trim() || undefined),
+        customNotes: combinedNotes,
       });
       onToast(`Rapport opprettet! Åpnes i ny fane...`, 'success');
       // Open document in new tab
@@ -745,16 +768,30 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
         </Alert>
       )}
 
+      {/* Report Contents Info */}
+      <Stack spacing={1} sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
+        <Typography variant="subtitle2">Rapporten vil inneholde:</Typography>
+        <Typography variant="body2" component="div">
+          • Tittel og måned ({month.slice(0,4)}-{month.slice(4,6)})<br/>
+          • Prosjektinformasjon<br/>
+          • Sammendrag (timer, dager, aktiviteter)<br/>
+          • Detaljert logg med alle registreringer
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          Rapporten skal inneholde følgende: Klient informasjon, Oppdragsgiver, Tidsperiode, Miljøarbeider.
+        </Typography>
+      </Stack>
+
       {/* Custom Introduction */}
       <Stack spacing={1}>
-        <Typography variant="subtitle2">Innledning (valgfritt)</Typography>
+        <Typography variant="subtitle2">Bakgrunn for tiltaket</Typography>
         <TextField
           multiline
           rows={4}
           placeholder={
             template === 'miljøarbeider' ?
-            "Skriv en innledning til rapporten...\n\nEksempel: I løpet av denne perioden har jeg jobbet med flere brukere gjennom ulike aktiviteter. Fokuset har vært på sosial utvikling og hverdagsmestring.\n\nHusk: Unngå navn og identifiserbar informasjon." :
-            "Skriv en innledning til rapporten... \n\nEksempel: Dette er en oppsummering av mine aktiviteter i løpet av måneden. Jeg har fokusert på..."
+            "Beskriv bakgrunnen for tiltaket og målsettingen.\n\nHusk: Unngå navn og identifiserbar informasjon." :
+            "Beskriv bakgrunnen for tiltaket..."
           }
           value={customIntro}
           onChange={(e) => setCustomIntro(e.target.value)}
@@ -770,18 +807,18 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
         </Typography>
       </Stack>
 
-      {/* Preview Info */}
-      <Stack spacing={1} sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
-        <Typography variant="subtitle2">Rapporten vil inneholde:</Typography>
-        <Typography variant="body2" component="div">
-          • Tittel og måned ({month.slice(0,4)}-{month.slice(4,6)})<br/>
-          {customIntro && '• Din egendefinerte innledning\n'}
-          • Prosjektinformasjon<br/>
-          • Sammendrag (timer, dager, aktiviteter)<br/>
-          • Detaljert logg med alle registreringer<br/>
-          {customNotes && '• Dine tilleggsnotater'}
-        </Typography>
-      </Stack>
+
+      {/* Structured Sections for Miljøarbeider */}
+      {(template === 'miljøarbeider' || template === 'auto') && (
+        <Stack spacing={2}>
+          <TextField label="Arbeid og tiltak som er gjennomført" multiline rows={3} value={arbeidTiltak} onChange={(e)=>setArbeidTiltak(e.target.value)} fullWidth />
+          <TextField label="Utvikling og endring siden oppstart" multiline rows={3} value={utviklingEndring} onChange={(e)=>setUtviklingEndring(e.target.value)} fullWidth />
+          <TextField label="Nåværende utfordringer" multiline rows={3} value={utfordringer} onChange={(e)=>setUtfordringer(e.target.value)} fullWidth />
+          <TextField label="Interesser og påvirkningsfaktorer" multiline rows={3} value={interesserPavirkn} onChange={(e)=>setInteresserPavirkn(e.target.value)} fullWidth />
+          <TextField label="Faglig vurdering" multiline rows={3} value={fagligVurdering} onChange={(e)=>setFagligVurdering(e.target.value)} fullWidth />
+          <TextField label="Anbefalinger videre" multiline rows={3} value={anbefalinger} onChange={(e)=>setAnbefalinger(e.target.value)} fullWidth />
+        </Stack>
+      )}
 
       {/* Custom Notes */}
       <Stack spacing={1}>
