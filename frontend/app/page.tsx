@@ -871,11 +871,8 @@ function SendTimesheet({ month, onToast, settings, updateSettings }: { month: st
   const [busy, setBusy] = useState(false);
   const [googleConnected, setGoogleConnected] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
-  const [useGmail, setUseGmail] = useState(false);
-  const sender = settings?.timesheet_sender || '';
   const recipient = settings?.timesheet_recipient || '';
   const format = settings?.timesheet_format || 'xlsx';
-  const smtpPass = settings?.smtp_app_password || '';
 
   // Check Google auth status on mount
   useEffect(() => {
@@ -883,9 +880,6 @@ function SendTimesheet({ month, onToast, settings, updateSettings }: { month: st
       try {
         const status = await getGoogleAuthStatus();
         setGoogleConnected(status.isConnected && !status.needsReauth);
-        if (status.isConnected && !status.needsReauth) {
-          setUseGmail(true); // Default to Gmail if connected
-        }
       } catch (e) {
         console.error('Failed to check Google auth:', e);
       } finally {
@@ -904,15 +898,6 @@ function SendTimesheet({ month, onToast, settings, updateSettings }: { month: st
     } finally { setBusy(false); }
   }
 
-  async function handleSendSMTP() {
-    setBusy(true);
-    try {
-      await sendTimesheet({ month, senderEmail: sender, recipientEmail: recipient, format });
-      onToast('Timeliste sendt via SMTP', 'success');
-    } catch (e:any) {
-      onToast(`Kunne ikke sende: ${e?.message || e}`, 'error');
-    } finally { setBusy(false); }
-  }
 
   if (checkingAuth) {
     return <CircularProgress size={24} />;
@@ -920,20 +905,7 @@ function SendTimesheet({ month, onToast, settings, updateSettings }: { month: st
 
   return (
     <Stack spacing={2}>
-      {googleConnected && (
-        <Stack direction="row" spacing={2} alignItems="center">
-          <Chip label="Google-konto tilkoblet" color="success" size="small" />
-          <FormControl size="small">
-            <InputLabel>Sendemetode</InputLabel>
-            <Select label="Sendemetode" value={useGmail ? 'gmail' : 'smtp'} onChange={(e)=>setUseGmail(e.target.value === 'gmail')}>
-              <MenuItem value="gmail">Gmail (anbefalt)</MenuItem>
-              <MenuItem value="smtp">SMTP</MenuItem>
-            </Select>
-          </FormControl>
-        </Stack>
-      )}
-      
-      {useGmail && googleConnected ? (
+      {googleConnected ? (
         <>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
             <TextField label="Mottaker e-post" value={recipient} onChange={(e)=>updateSettings({timesheet_recipient: e.target.value})} fullWidth />
@@ -949,48 +921,25 @@ function SendTimesheet({ month, onToast, settings, updateSettings }: { month: st
           <Typography variant="caption" color="text.secondary">E-posten sendes fra din tilkoblede Google-konto.</Typography>
         </>
       ) : (
-        <>
-          {!googleConnected && (
-            <Stack spacing={1} sx={{ p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
-              <Typography variant="body2" fontWeight="bold">
-                💡 Tips: Koble til Google for enklere sending
-              </Typography>
-              <Button 
-                variant="outlined" 
-                size="small"
-                onClick={async () => {
-                  try {
-                    const authUrl = await initiateGoogleAuth();
-                    window.location.href = authUrl;
-                  } catch (e: any) {
-                    onToast(`Kunne ikke starte Google-pålogging: ${e?.message || e}`, 'error');
-                  }
-                }}
-              >
-                🔗 Koble til Google-konto
-              </Button>
-              <Typography variant="caption" color="text.secondary">
-                Send direkte fra Gmail uten app-passord
-              </Typography>
-            </Stack>
-          )}
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            <TextField label="Avsender e-post" value={sender} onChange={(e)=>updateSettings({timesheet_sender: e.target.value})} fullWidth />
-            <TextField label="Mottaker e-post" value={recipient} onChange={(e)=>updateSettings({timesheet_recipient: e.target.value})} fullWidth />
-            <FormControl>
-              <InputLabel>Format</InputLabel>
-              <Select label="Format" value={format} onChange={(e)=>updateSettings({timesheet_format: e.target.value})}>
-                <MenuItem value="xlsx">XLSX</MenuItem>
-                <MenuItem value="pdf">PDF</MenuItem>
-              </Select>
-            </FormControl>
-          </Stack>
-          <TextField type="password" label="App-passord (SMTP)" value={smtpPass} onChange={(e)=>updateSettings({smtp_app_password: e.target.value})} fullWidth />
-          <Button variant="contained" onClick={handleSendSMTP} disabled={busy || !sender || !recipient}>Send via SMTP</Button>
-          <Typography variant="caption" color="text.secondary">
-            Vi gjetter SMTP basert på e-post (Gmail/Outlook/Yahoo/iCloud/Proton m.fl.). Bruk app-passord for Gmail/Outlook.
+        <Stack spacing={1} sx={{ p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
+          <Typography variant="body2" fontWeight="bold">
+            💡 Tips: Koble til Google for å sende timelisten direkte fra din konto
           </Typography>
-        </>
+          <Button 
+            variant="outlined" 
+            size="small"
+            onClick={async () => {
+              try {
+                const authUrl = await initiateGoogleAuth();
+                window.location.href = authUrl;
+              } catch (e: any) {
+                onToast(`Kunne ikke starte Google-pålogging: ${e?.message || e}`, 'error');
+              }
+            }}
+          >
+            🔗 Koble til Google-konto
+          </Button>
+        </Stack>
       )}
     </Stack>
   );
