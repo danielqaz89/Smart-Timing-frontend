@@ -148,6 +148,16 @@ export async function initiateGoogleAuth(scopes: 'base' | 'gmail' = 'base', user
   return data.authUrl;
 }
 
+export async function disconnectGoogleAccount(userId = 'default') {
+  const res = await fetch(`${API_BASE}/api/auth/google/disconnect`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId }),
+  });
+  if (!res.ok) throw new Error('Failed to disconnect Google account');
+  return res.json();
+}
+
 export async function generateMonthlyReport(opts: { 
   month: string; 
   userId?: string; 
@@ -164,6 +174,29 @@ export async function generateMonthlyReport(opts: {
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ error: 'Failed to generate report' }));
     throw new Error(errorData.error || errorData.message || 'Failed to generate report');
+  }
+  return res.json();
+}
+
+export async function exportUserData(userId = 'default') {
+  const res = await fetch(`${API_BASE}/api/gdpr/export-data`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId }),
+  });
+  if (!res.ok) throw new Error('Failed to export user data');
+  return res.json();
+}
+
+export async function deleteUserAccount(userId = 'default', confirmation: string) {
+  const res = await fetch(`${API_BASE}/api/gdpr/delete-account`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId, confirmation }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ error: 'Failed to delete account' }));
+    throw new Error(errorData.error || errorData.message || 'Failed to delete account');
   }
   return res.json();
 }
