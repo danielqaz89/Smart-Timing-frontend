@@ -49,6 +49,28 @@ export async function deleteLog(id: string) {
   return res.json();
 }
 
+export async function archiveLog(id: string) {
+  const res = await fetch(`${API_BASE}/api/logs/${id}/archive`, { method: "PATCH" });
+  if (!res.ok) throw new Error("Failed to archive log");
+  return res.json();
+}
+
+export async function unarchiveLog(id: string) {
+  const res = await fetch(`${API_BASE}/api/logs/${id}/unarchive`, { method: "PATCH" });
+  if (!res.ok) throw new Error("Failed to unarchive log");
+  return res.json();
+}
+
+export async function archiveLogsByMonth(month: string) {
+  const res = await fetch(`${API_BASE}/api/logs/archive-month`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ month }),
+  });
+  if (!res.ok) throw new Error("Failed to archive month");
+  return res.json();
+}
+
 export async function updateLog(id: string, payload: Partial<{
   date: string;
   start: string;
@@ -138,6 +160,20 @@ export async function sendTimesheetViaGmail(opts: { month: string; recipientEmai
 export async function getGoogleAuthStatus(userId = 'default') {
   const res = await fetch(`${API_BASE}/api/auth/google/status?user_id=${userId}`, { cache: 'no-store' });
   if (!res.ok) throw new Error('Failed to check Google auth status');
+  return res.json();
+}
+
+export async function syncToGoogleSheets(opts: { month: string; userId?: string }) {
+  const { month, userId = 'default' } = opts;
+  const res = await fetch(`${API_BASE}/api/sheets/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ month, user_id: userId }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ error: 'Failed to sync to Google Sheets' }));
+    throw new Error(errorData.error || errorData.message || 'Failed to sync to Google Sheets');
+  }
   return res.json();
 }
 
@@ -336,4 +372,47 @@ export async function deleteQuickTemplate(id: number) {
   const res = await fetch(`${API_BASE}/api/quick-templates/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to delete template');
   return res.json();
+}
+
+// ===== COMPANIES =====
+export type CompanyRecord = {
+  id?: number;
+  name: string;
+  orgnr?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  address_line?: string;
+  postal_code?: string;
+  city?: string;
+  logo_base64?: string | null;
+  display_order?: number;
+};
+
+export async function createOrUpdateCompany(company: CompanyRecord) {
+  const res = await fetch(`${API_BASE}/api/companies`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(company),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || 'Failed to save company');
+  return data;
+}
+
+export async function submitCompanyRequest(company: CompanyRecord & { requester_email?: string }) {
+  let res = await fetch(`${API_BASE}/api/admin/company-requests`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(company),
+  });
+  if (res.status === 404) {
+    res = await fetch(`${API_BASE}/api/company-requests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(company),
+    });
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || data?.message || 'Failed to submit company request');
+  return data;
 }
