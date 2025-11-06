@@ -13,15 +13,10 @@ export type LogRow = {
   notes: string | null;
   expense_coverage: number;
   created_at: string;
-  is_archived?: boolean;
-  archived_at?: string | null;
 };
 
-export async function fetchLogs(month?: string, archived = false): Promise<LogRow[]> {
-  const params = new URLSearchParams();
-  if (month) params.append('month', month);
-  params.append('archived', String(archived));
-  const qs = params.toString() ? `?${params.toString()}` : '';
+export async function fetchLogs(month?: string): Promise<LogRow[]> {
+  const qs = month ? `?month=${month}` : "";
   const res = await fetch(`${API_BASE}/api/logs${qs}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to load logs");
   return res.json();
@@ -117,28 +112,6 @@ export async function deleteLogsAll() {
   return res.json();
 }
 
-export async function archiveLog(id: string) {
-  const res = await fetch(`${API_BASE}/api/logs/${id}/archive`, { method: "PATCH" });
-  if (!res.ok) throw new Error("Failed to archive log");
-  return res.json();
-}
-
-export async function unarchiveLog(id: string) {
-  const res = await fetch(`${API_BASE}/api/logs/${id}/unarchive`, { method: "PATCH" });
-  if (!res.ok) throw new Error("Failed to unarchive log");
-  return res.json();
-}
-
-export async function archiveLogsByMonth(month: string) {
-  const res = await fetch(`${API_BASE}/api/logs/archive-month`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ month }),
-  });
-  if (!res.ok) throw new Error("Failed to archive month");
-  return res.json();
-}
-
 export async function sendTimesheet(opts: { month: string; senderEmail: string; recipientEmail: string; format: 'xlsx' | 'pdf' }) {
   const res = await fetch(`${API_BASE}/api/timesheet/send`, {
     method: 'POST',
@@ -175,16 +148,6 @@ export async function initiateGoogleAuth(scopes: 'base' | 'gmail' = 'base', user
   return data.authUrl;
 }
 
-export async function disconnectGoogleAccount(userId = 'default') {
-  const res = await fetch(`${API_BASE}/api/auth/google/disconnect`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId }),
-  });
-  if (!res.ok) throw new Error('Failed to disconnect Google account');
-  return res.json();
-}
-
 export async function generateMonthlyReport(opts: { 
   month: string; 
   userId?: string; 
@@ -205,43 +168,6 @@ export async function generateMonthlyReport(opts: {
   return res.json();
 }
 
-export async function syncToGoogleSheets(opts: { month: string; userId?: string }) {
-  const { month, userId = 'default' } = opts;
-  const res = await fetch(`${API_BASE}/api/sheets/sync`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ month, user_id: userId }),
-  });
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({ error: 'Failed to sync to Google Sheets' }));
-    throw new Error(errorData.error || errorData.message || 'Failed to sync to Google Sheets');
-  }
-  return res.json();
-}
-
-export async function exportUserData(userId = 'default') {
-  const res = await fetch(`${API_BASE}/api/gdpr/export-data`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId }),
-  });
-  if (!res.ok) throw new Error('Failed to export user data');
-  return res.json();
-}
-
-export async function deleteUserAccount(userId = 'default', confirmation: string) {
-  const res = await fetch(`${API_BASE}/api/gdpr/delete-account`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId, confirmation }),
-  });
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({ error: 'Failed to delete account' }));
-    throw new Error(errorData.error || errorData.message || 'Failed to delete account');
-  }
-  return res.json();
-}
-
 // ===== USER SETTINGS =====
 export type UserSettings = {
   id?: number;
@@ -257,10 +183,6 @@ export type UserSettings = {
   webhook_url: string | null;
   sheet_url: string | null;
   month_nav: string | null;
-  invoice_reminder_active?: boolean;
-  theme_mode?: 'light' | 'dark';
-  view_mode?: 'week' | 'month';
-  onboarding_done?: boolean;
   created_at?: string;
   updated_at?: string;
 };
@@ -300,6 +222,26 @@ export type ProjectInfo = {
 // Re-export for backwards compatibility
 export type { BrregCompany } from './brreg';
 export { searchBrregCompany, getBrregCompanyByOrgnr, KINOA_TILTAK_AS } from './brreg';
+
+// ===== CMS PAGES/THEME =====
+export async function fetchCmsPage(pageId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/admin/cms/pages/${encodeURIComponent(pageId)}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error('Failed to load CMS page');
+  return res.json();
+}
+
+export async function submitContactForm(opts: { page_id?: string; form_id?: string; values: Record<string, any> }) {
+  const res = await fetch(`${API_BASE}/api/cms/contact/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Failed to submit form' }));
+    throw new Error(err.error || 'Failed to submit form');
+  }
+  return res.json();
+}
 
 export async function fetchProjectInfo(userId = 'default'): Promise<ProjectInfo | null> {
   const res = await fetch(`${API_BASE}/api/project-info?user_id=${userId}`, { cache: 'no-store' });
@@ -361,51 +303,4 @@ export async function deleteQuickTemplate(id: number) {
   const res = await fetch(`${API_BASE}/api/quick-templates/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to delete template');
   return res.json();
-}
-
-// ===== COMPANIES =====
-export type CompanyRecord = {
-  id?: number;
-  name: string;
-  orgnr?: string;
-  contact_email?: string;
-  contact_phone?: string;
-  // Optional address fields (from BRREG)
-  address_line?: string;
-  postal_code?: string;
-  city?: string;
-  logo_base64?: string | null;
-  display_order?: number;
-};
-
-export async function createOrUpdateCompany(company: CompanyRecord) {
-  const res = await fetch(`${API_BASE}/api/companies`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(company),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error || 'Failed to save company');
-  return data;
-}
-
-// Submit a company request to admin for review/approval
-export async function submitCompanyRequest(company: CompanyRecord & { requester_email?: string }) {
-  // Try admin endpoint first
-  let res = await fetch(`${API_BASE}/api/admin/company-requests`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(company),
-  });
-  if (res.status === 404) {
-    // Fallback public endpoint
-    res = await fetch(`${API_BASE}/api/company-requests`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(company),
-    });
-  }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error || data?.message || 'Failed to submit company request');
-  return data;
 }
