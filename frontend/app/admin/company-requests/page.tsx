@@ -22,7 +22,7 @@ import {
   Stack,
   CircularProgress,
 } from '@mui/material';
-import { useAdmin } from '../contexts/AdminProvider';
+import { useAdmin } from '../../../contexts/AdminContext';
 
 interface CompanyRequest {
   id: number;
