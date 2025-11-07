@@ -968,8 +968,12 @@ function SendTimesheet({ month, onToast, settings, updateSettings }: { month: st
     <Stack spacing={2}>
       {googleConnected ? (
         <>
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            <TextField label="Mottaker e-post" value={recipient} onChange={(e)=>updateSettings({timesheet_recipient: e.target.value})} fullWidth />
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+          <TextField label="Tittel" value={manualTitle} onChange={(e) => setManualTitle(e.target.value)} fullWidth />
+          <TextField label="Saksnummer (Klient ID)" value={manualCaseId} onChange={(e)=>setManualCaseId(e.target.value)} fullWidth placeholder="f.eks. KLIENT-123" InputProps={{ list: 'case-suggestions' }} />
+          <datalist id="case-suggestions">
+            {myCases.map((c)=> (<option key={c} value={c} />))}
+          </datalist>
             <FormControl>
               <InputLabel>Format</InputLabel>
               <Select label="Format" value={format} onChange={(e)=>updateSettings({timesheet_format: e.target.value})}>
@@ -1134,6 +1138,19 @@ export default function Home() {
   const [manualProject, setManualProject] = useState("");
   const [manualPlace, setManualPlace] = useState("");
   const [manualNotes, setManualNotes] = useState("");
+  const [manualCaseId, setManualCaseId] = useState("");
+  const [myCases, setMyCases] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const token = localStorage.getItem('company_token');
+      if (!token) return;
+      (async () => {
+        const res = await fetch(`${API_BASE}/api/company/my-cases`, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (res.ok && Array.isArray(data.cases)) setMyCases(data.cases.map((c:any)=>c.case_id));
+      })();
+    } catch {}
+  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkMode, setBulkMode] = useState(false);
@@ -1447,6 +1464,7 @@ export default function Home() {
         project: manualProject || undefined,
         place: manualPlace || undefined,
         notes: manualNotes || undefined,
+        caseId: manualCaseId || undefined,
       });
       // Clear form after submit
       setDate(dayjs().format("YYYY-MM-DD"));
