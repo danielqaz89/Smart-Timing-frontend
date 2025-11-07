@@ -66,6 +66,52 @@ function InvitesList() {
   );
 }
 
+function LogsCard() {
+  const { fetchWithAuth } = useCompany();
+  const [logs, setLogs] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [caseId, setCaseId] = React.useState('');
+  const [refresh, setRefresh] = React.useState(0);
+  const API = `${API_BASE}/api/company/logs`;
+  React.useEffect(() => { (async ()=>{
+    setLoading(true);
+    const qs = new URLSearchParams();
+    if (caseId) qs.set('case_id', caseId);
+    const res = await fetchWithAuth(`${API}${qs.toString() ? '?' + qs.toString() : ''}`);
+    const data = await res.json();
+    if (res.ok) setLogs(data.logs || []);
+    setLoading(false);
+  })(); }, [caseId, refresh]);
+  return (
+    <Card>
+      <CardHeader title="Tidslogger" subheader="Filtrer på saksnummer (Klient ID)" />
+      <CardContent>
+        <Stack direction={{ xs:'column', md:'row' }} spacing={2} sx={{ mb: 2 }}>
+          <TextField size="small" label="Saksnummer (Klient ID)" value={caseId} onChange={(e)=>setCaseId(e.target.value)} placeholder="f.eks. KLIENT-123" />
+          <Button size="small" variant="outlined" onClick={()=>setRefresh(x=>x+1)}>Oppdater</Button>
+        </Stack>
+        {loading ? <CircularProgress size={20} /> : logs.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">Ingen logger funnet.</Typography>
+        ) : (
+          <Stack spacing={1}>
+            {logs.map((lr:any)=> (
+              <Box key={lr.id} sx={{ p:1, border:'1px solid', borderColor:'divider', borderRadius:1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  {new Date(lr.date).toLocaleDateString()} • {String(lr.start_time).slice(0,5)}–{String(lr.end_time).slice(0,5)} • {lr.user_email}
+                </Typography>
+                <Typography variant="body2">
+                  {lr.activity || ''} {lr.title ? `• ${lr.title}` : ''} {lr.project ? `• ${lr.project}` : ''} {lr.place ? `• ${lr.place}` : ''} {lr.case_id ? `• Case: ${lr.case_id}` : ''}
+                </Typography>
+                {lr.notes && <Typography variant="caption" sx={{ display:'block' }}>{lr.notes}</Typography>}
+              </Box>
+            ))}
+          </Stack>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function PortalContent() {
   const { loading, token, company, user, login, logout, fetchWithAuth } = useCompany();
   const [users, setUsers] = React.useState<any[]>([]);
@@ -156,6 +202,8 @@ function PortalContent() {
       </Card>
 
       <AuditCard />
+
+      <LogsCard />
 
       <Card>
         <CardHeader title="Brukere" />
