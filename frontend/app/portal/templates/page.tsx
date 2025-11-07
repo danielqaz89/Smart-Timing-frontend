@@ -214,26 +214,293 @@ function TemplatesContent() {
     }
   }
 
+  const exampleTemplates = {
+    timesheet: {
+      html: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Timeliste</title>
+</head>
+<body>
+  <div class="header">
+    <h1>{{company.name}}</h1>
+    <p>Timeliste for {{period.month_label}}</p>
+  </div>
+
+  <div class="summary">
+    <p><strong>Totale timer:</strong> {{totals.total_hours}}</p>
+    <p><strong>Antall dager:</strong> {{totals.days_count}}</p>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Dato</th>
+        <th>Inn</th>
+        <th>Ut</th>
+        <th>Pause</th>
+        <th>Timer</th>
+        <th>Aktivitet</th>
+        <th>Notater</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each rows}}
+      <tr>
+        <td>{{this.date}}</td>
+        <td>{{this.start_time}}</td>
+        <td>{{this.end_time}}</td>
+        <td>{{this.break_hours}}</td>
+        <td>{{this.hours}}</td>
+        <td>{{this.activity}}</td>
+        <td>{{this.notes}}</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <p>Generert: {{generated_at}}</p>
+  </div>
+</body>
+</html>`,
+      css: `body {
+  font-family: Arial, sans-serif;
+  margin: 20px;
+  color: #333;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 30px;
+  border-bottom: 2px solid #1976d2;
+  padding-bottom: 10px;
+}
+
+.header h1 {
+  margin: 0;
+  color: #1976d2;
+}
+
+.summary {
+  background: #f5f5f5;
+  padding: 15px;
+  border-radius: 5px;
+  margin-bottom: 20px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+
+th, td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+th {
+  background-color: #1976d2;
+  color: white;
+  font-weight: bold;
+}
+
+tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+.footer {
+  text-align: center;
+  color: #666;
+  font-size: 0.9em;
+  margin-top: 30px;
+}
+
+@media print {
+  body { margin: 0; }
+  .header { page-break-after: avoid; }
+}`
+    },
+    report: {
+      html: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Rapport</title>
+</head>
+<body>
+  <div class="header">
+    <h1>{{company.name}}</h1>
+    <h2>Månedlig rapport - {{period.month_label}}</h2>
+  </div>
+
+  <div class="summary">
+    <div class="summary-card">
+      <h3>Totale timer</h3>
+      <p class="big-number">{{totals.total_hours}}</p>
+    </div>
+    <div class="summary-card">
+      <h3>Antall saker</h3>
+      <p class="big-number">{{totals.case_count}}</p>
+    </div>
+  </div>
+
+  <h3>Timer per saksnummer</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Saksnummer</th>
+        <th>Timer</th>
+        <th>Andel</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each rows}}
+      <tr>
+        <td>{{this.case_id}}</td>
+        <td>{{this.hours}}</td>
+        <td>{{this.percentage}}%</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <p>Generert: {{generated_at}}</p>
+  </div>
+</body>
+</html>`,
+      css: `body {
+  font-family: Arial, sans-serif;
+  margin: 20px;
+  color: #333;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 30px;
+  border-bottom: 3px solid #2e7d32;
+  padding-bottom: 15px;
+}
+
+.header h1 {
+  margin: 0;
+  color: #2e7d32;
+}
+
+.header h2 {
+  margin: 10px 0 0 0;
+  color: #666;
+  font-weight: normal;
+}
+
+.summary {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.summary-card {
+  flex: 1;
+  background: linear-gradient(135deg, #2e7d32 0%, #4caf50 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.summary-card h3 {
+  margin: 0 0 10px 0;
+  font-size: 0.9em;
+}
+
+.big-number {
+  font-size: 2.5em;
+  font-weight: bold;
+  margin: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+
+th, td {
+  border: 1px solid #ddd;
+  padding: 12px;
+  text-align: left;
+}
+
+th {
+  background-color: #2e7d32;
+  color: white;
+  font-weight: bold;
+}
+
+tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+.footer {
+  text-align: center;
+  color: #666;
+  font-size: 0.9em;
+  margin-top: 30px;
+}
+
+@media print {
+  body { margin: 0; }
+  .summary { page-break-after: avoid; }
+}`
+    }
+  };
+
+  function loadExample() {
+    const example = exampleTemplates[type];
+    setHtml(example.html);
+    setCss(example.css);
+    setSuccess('Example template loaded');
+  }
+
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>Templates</Typography>
+      <Typography variant="h4" gutterBottom>Rapportgenerator</Typography>
       <Typography variant="body2" color="text.secondary" gutterBottom>
-        Design HTML/CSS templates for timesheets and reports. Use Handlebars placeholders like{' '}
-        <code>{'{{company.name}}'}</code>, <code>{'{{period.month_label}}'}</code>, <code>{'{{totals.total_hours}}'}</code>
+        Skreddersy dine egne timelister og rapporter med HTML/CSS. Bruk Handlebars-variabler for å vise data.
       </Typography>
 
       {error && <Alert severity="error" sx={{ my: 2 }} onClose={() => setError('')}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ my: 2 }} onClose={() => setSuccess('')}>{success}</Alert>}
 
+      <Alert severity="info" sx={{ mb: 3 }}>
+        <Typography variant="subtitle2" gutterBottom>Tilgjengelige variabler:</Typography>
+        <Typography variant="caption" component="div">
+          <strong>Bedriftsinfo:</strong> <code>{'{{company.name}}'}</code>, <code>{'{{company.orgnr}}'}</code><br/>
+          <strong>Periode:</strong> <code>{'{{period.month_label}}'}</code>, <code>{'{{period.year}}'}</code>, <code>{'{{generated_at}}'}</code><br/>
+          <strong>Totaler:</strong> <code>{'{{totals.total_hours}}'}</code>, <code>{'{{totals.days_count}}'}</code>, <code>{'{{totals.case_count}}'}</code><br/>
+          <strong>Loop (timer):</strong> <code>{'{{#each rows}} {{this.date}} {{this.hours}} {{/each}}'}</code><br/>
+          <strong>Felter:</strong> date, start_time, end_time, break_hours, hours, activity, title, case_id, notes, user_email
+        </Typography>
+      </Alert>
+
       <Paper sx={{ p: 3, mt: 3 }}>
         <Stack spacing={2}>
-          <FormControl sx={{ maxWidth: 240 }}>
-            <InputLabel>Document Type</InputLabel>
-            <Select label="Document Type" value={type} onChange={(e) => setType(e.target.value as any)}>
-              <MenuItem value="timesheet">Timesheet</MenuItem>
-              <MenuItem value="report">Report</MenuItem>
-            </Select>
-          </FormControl>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center" justifyContent="space-between">
+            <FormControl sx={{ maxWidth: 240 }}>
+              <InputLabel>Document Type</InputLabel>
+              <Select label="Document Type" value={type} onChange={(e) => setType(e.target.value as any)}>
+                <MenuItem value="timesheet">Timesheet</MenuItem>
+                <MenuItem value="report">Report</MenuItem>
+              </Select>
+            </FormControl>
+            <Button variant="outlined" onClick={loadExample} startIcon={<Typography>📝</Typography>}>
+              Last eksempelmal
+            </Button>
+          </Stack>
 
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
             <TextField
