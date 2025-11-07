@@ -82,7 +82,7 @@ function SendButton({
 
 function TemplatesContent() {
   const { fetchWithAuth } = useCompany();
-  const [type, setType] = useState<'timesheet' | 'report'>('timesheet');
+  const [type, setType] = useState<'timesheet' | 'report' | 'case_report'>('timesheet');
   const [html, setHtml] = useState('<h1>{{company.name}}</h1>');
   const [css, setCss] = useState('body{font-family:Arial}');
   const [previewHtml, setPreviewHtml] = useState('');
@@ -102,6 +102,16 @@ function TemplatesContent() {
   
   // Report configuration
   const [showConfig, setShowConfig] = useState(false);
+  const [caseReportData, setCaseReportData] = useState({
+    background: '',
+    actions: '',
+    progress: '',
+    challenges: '',
+    factors: '',
+    assessment: '',
+    recommendations: '',
+    notes: '',
+  });
   const [reportConfig, setReportConfig] = useState({
     includeColumns: {
       date: true,
@@ -480,6 +490,74 @@ tr:nth-child(even) {
   body { margin: 0; }
   .summary { page-break-after: avoid; }
 }`
+    },
+    case_report: {
+      html: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Saksrapport</title>
+</head>
+<body>
+  <div class="header">
+    <h1>{{company.name}}</h1>
+    <h2>Saksrapport - {{period.month_label}}</h2>
+  </div>
+
+  <section>
+    <h3>Bakgrunn for tiltaket</h3>
+    <p>{{report.background}}</p>
+  </section>
+
+  <section>
+    <h3>Arbeid og tiltak som er gjennomført</h3>
+    <p>{{report.actions}}</p>
+  </section>
+
+  <section>
+    <h3>Utvikling og endring siden oppstart</h3>
+    <p>{{report.progress}}</p>
+  </section>
+
+  <section>
+    <h3>Nåværende utfordringer</h3>
+    <p>{{report.challenges}}</p>
+  </section>
+
+  <section>
+    <h3>Interesser og påvirkningsfaktorer</h3>
+    <p>{{report.factors}}</p>
+  </section>
+
+  <section>
+    <h3>Faglig vurdering</h3>
+    <p>{{report.assessment}}</p>
+  </section>
+
+  <section>
+    <h3>Anbefalinger videre</h3>
+    <p>{{report.recommendations}}</p>
+  </section>
+
+  {{#if report.notes}}
+  <section>
+    <h3>Tilleggsnotater</h3>
+    <p>{{report.notes}}</p>
+  </section>
+  {{/if}}
+
+  <div class="footer">
+    <p>Generert: {{generated_at}}</p>
+  </div>
+</body>
+</html>`,
+      css: `body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+.header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #6a1b9a; padding-bottom: 15px; }
+.header h1 { margin: 0; color: #6a1b9a; }
+.header h2 { margin: 10px 0 0 0; color: #666; font-weight: normal; }
+section { margin-bottom: 20px; }
+section h3 { margin: 0 0 6px 0; color: #6a1b9a; }
+.footer { text-align: center; color: #666; font-size: 0.9em; margin-top: 30px; }`
     }
   };
 
@@ -507,7 +585,10 @@ tr:nth-child(even) {
           <strong>Periode:</strong> <code>{'{{period.month_label}}'}</code>, <code>{'{{period.year}}'}</code>, <code>{'{{generated_at}}'}</code><br/>
           <strong>Totaler:</strong> <code>{'{{totals.total_hours}}'}</code>, <code>{'{{totals.days_count}}'}</code>, <code>{'{{totals.case_count}}'}</code><br/>
           <strong>Loop (timer):</strong> <code>{'{{#each rows}} {{this.date}} {{this.hours}} {{/each}}'}</code><br/>
-          <strong>Felter:</strong> date, start_time, end_time, break_hours, hours, activity, title, case_id, notes, user_email
+          <strong>Felter:</strong> date, start_time, end_time, break_hours, hours, activity, title, case_id, notes, user_email<br/>
+          {type === 'case_report' && (
+            <><strong>Saksrapport:</strong> <code>{'{{report.background}}'}</code>, <code>{'{{report.actions}}'}</code>, <code>{'{{report.progress}}'}</code>, <code>{'{{report.challenges}}'}</code>, <code>{'{{report.factors}}'}</code>, <code>{'{{report.assessment}}'}</code>, <code>{'{{report.recommendations}}'}</code>, <code>{'{{report.notes}}'}</code></>
+          )}
         </Typography>
       </Alert>
 
@@ -519,6 +600,7 @@ tr:nth-child(even) {
               <Select label="Document Type" value={type} onChange={(e) => setType(e.target.value as any)}>
                 <MenuItem value="timesheet">Timesheet</MenuItem>
                 <MenuItem value="report">Report</MenuItem>
+                <MenuItem value="case_report">Saksrapport</MenuItem>
               </Select>
             </FormControl>
             <Button variant="outlined" onClick={loadExample} startIcon={<Typography>📝</Typography>}>
@@ -645,6 +727,89 @@ tr:nth-child(even) {
                 Disse innstillingene brukes når du genererer forhåndsvisning og PDF. 
                 Du kan også redigere HTML-malen direkte for full kontroll.
               </Alert>
+            </Paper>
+          )}
+
+          {type === 'case_report' && (
+            <Paper sx={{ p: 2, bgcolor: 'background.default' }} variant="outlined">
+              <Typography variant="subtitle2" gutterBottom>Saksrapport innhold</Typography>
+              <Typography variant="caption" color="text.secondary" gutterBottom display="block">
+                Fyll inn innholdet for saksrapporten. Dette vil bli tilgjengelig som variabler i HTML-malen.
+              </Typography>
+              <Stack spacing={2} sx={{ mt: 2 }}>
+                <TextField
+                  label="Bakgrunn for tiltaket"
+                  multiline
+                  rows={3}
+                  value={caseReportData.background}
+                  onChange={(e) => setCaseReportData({ ...caseReportData, background: e.target.value })}
+                  fullWidth
+                  placeholder="Beskriv bakgrunnen for tiltaket..."
+                />
+                <TextField
+                  label="Arbeid og tiltak som er gjennomført"
+                  multiline
+                  rows={3}
+                  value={caseReportData.actions}
+                  onChange={(e) => setCaseReportData({ ...caseReportData, actions: e.target.value })}
+                  fullWidth
+                  placeholder="Beskriv arbeid og tiltak..."
+                />
+                <TextField
+                  label="Utvikling og endring siden oppstart"
+                  multiline
+                  rows={3}
+                  value={caseReportData.progress}
+                  onChange={(e) => setCaseReportData({ ...caseReportData, progress: e.target.value })}
+                  fullWidth
+                  placeholder="Beskriv utvikling og endring..."
+                />
+                <TextField
+                  label="Nåværende utfordringer"
+                  multiline
+                  rows={3}
+                  value={caseReportData.challenges}
+                  onChange={(e) => setCaseReportData({ ...caseReportData, challenges: e.target.value })}
+                  fullWidth
+                  placeholder="Beskriv utfordringer..."
+                />
+                <TextField
+                  label="Interesser og påvirkningsfaktorer"
+                  multiline
+                  rows={3}
+                  value={caseReportData.factors}
+                  onChange={(e) => setCaseReportData({ ...caseReportData, factors: e.target.value })}
+                  fullWidth
+                  placeholder="Beskriv interesser og faktorer..."
+                />
+                <TextField
+                  label="Faglig vurdering"
+                  multiline
+                  rows={3}
+                  value={caseReportData.assessment}
+                  onChange={(e) => setCaseReportData({ ...caseReportData, assessment: e.target.value })}
+                  fullWidth
+                  placeholder="Gi faglig vurdering..."
+                />
+                <TextField
+                  label="Anbefalinger videre"
+                  multiline
+                  rows={3}
+                  value={caseReportData.recommendations}
+                  onChange={(e) => setCaseReportData({ ...caseReportData, recommendations: e.target.value })}
+                  fullWidth
+                  placeholder="Gi anbefalinger..."
+                />
+                <TextField
+                  label="Tilleggsnotater (valgfritt)"
+                  multiline
+                  rows={2}
+                  value={caseReportData.notes}
+                  onChange={(e) => setCaseReportData({ ...caseReportData, notes: e.target.value })}
+                  fullWidth
+                  placeholder="Eventuelle tilleggsnotater..."
+                />
+              </Stack>
             </Paper>
           )}
 
