@@ -42,6 +42,7 @@ const menuItems = [
   { label: 'Dashboard', path: '/admin/dashboard', icon: <DashboardIcon /> },
   { label: 'Users', path: '/admin/users', icon: <PeopleIcon /> },
   { label: 'Companies', path: '/admin/companies', icon: <BusinessIcon /> },
+  { label: 'Company Requests', path: '/admin/company-requests', icon: <BusinessIcon /> },
   { label: 'Analytics', path: '/admin/analytics', icon: <AnalyticsIcon /> },
   { label: 'Audit Log', path: '/admin/audit', icon: <HistoryIcon /> },
   { label: 'Settings', path: '/admin/settings', icon: <SettingsIcon /> },
@@ -53,7 +54,6 @@ const cmsMenuItems = [
   { label: 'Pages', path: '/admin/cms/pages', icon: <PagesIcon /> },
   { label: 'Media Library', path: '/admin/cms/media', icon: <MediaIcon /> },
   { label: 'Contact Submissions', path: '/admin/cms/submissions', icon: <ContactIcon /> },
-  { label: 'Company Requests', path: '/admin/cms/company-requests', icon: <BusinessIcon /> },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
