@@ -140,6 +140,28 @@ export default function SettingsDrawer() {
 
   const { user, isAuthenticated, logout } = useAuth();
 
+  // Company rate lock
+  const [companyRateLocked, setCompanyRateLocked] = useState(false);
+  const [companyRateLockedValue, setCompanyRateLockedValue] = useState<number | null>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = localStorage.getItem('company_token');
+        if (!token) return;
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'}/api/company/policy`, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (res.ok && data?.enforce_hourly_rate) {
+          setCompanyRateLocked(true);
+          setCompanyRateLockedValue(data.hourly_rate || null);
+          if (data.hourly_rate != null) {
+            setHourlyRate(Number(data.hourly_rate));
+            setHourlyRateInput(formatRate(Number(data.hourly_rate)));
+          }
+        }
+      } catch {}
+    })();
+  }, []);
+
   return (
     <>
       <IconButton aria-label="Innstillinger" onClick={() => setOpen(true)} size="small">
@@ -175,7 +197,8 @@ export default function SettingsDrawer() {
                       }}
                       onBlur={() => setHourlyRateInput(formatRate(hourlyRate))}
                       fullWidth
-                      disabled={saving}
+                      disabled={saving || companyRateLocked}
+                      helperText={companyRateLocked ? `Styrt av bedriftspolicy: ${companyRateLockedValue ?? ''}` : undefined}
                     />
                     <FormControl fullWidth disabled={saving}>
                       <InputLabel>Skatteprosent</InputLabel>
