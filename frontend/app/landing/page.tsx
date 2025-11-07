@@ -45,9 +45,10 @@ function renderSection(s: any) {
         <Stack spacing={2} alignItems="center" textAlign="center">
           <Typography variant="h2" fontWeight={800}>{c.title}</Typography>
           {c.subtitle && <Typography variant="h6" color="text.secondary">{c.subtitle}</Typography>}
-          <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+          <Stack direction="row" spacing={2} sx={{ mt: 2 }} flexWrap="wrap" justifyContent="center">
             {c.cta_primary_text && <Button href={c.cta_primary_link || '#'} variant="contained" size="large">{c.cta_primary_text}</Button>}
             {c.cta_secondary_text && <Button href={c.cta_secondary_link || '#'} variant="outlined" size="large">{c.cta_secondary_text}</Button>}
+            <Button href="/request-access" variant="outlined" size="large" color="secondary">Request Company Access</Button>
           </Stack>
         </Stack>
       );

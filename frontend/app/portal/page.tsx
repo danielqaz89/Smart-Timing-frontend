@@ -1,8 +1,10 @@
 "use client";
 
-import React from "react";
-import { CompanyProvider, useCompany } from "../../contexts/CompanyContext";
-import { Box, Button, Card, CardContent, CardHeader, CircularProgress, Container, Stack, TextField, Typography, MenuItem, Select, FormControl, InputLabel } from "@mui/material";
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { CompanyProvider } from "../../contexts/CompanyContext";
+import PortalLayout from '../../components/PortalLayout';
+import { Box, CircularProgress } from "@mui/material";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
 
