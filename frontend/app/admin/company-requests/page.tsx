@@ -55,7 +55,9 @@ export default function CompanyRequestsPage() {
     setLoading(true);
     setError('');
     try {
-      const data = await fetchWithAuth('/api/admin/company-requests');
+      const res = await fetchWithAuth('/api/admin/company-requests');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load requests');
       setRequests(data);
     } catch (e: any) {
       setError(e?.message || 'Failed to load requests');
