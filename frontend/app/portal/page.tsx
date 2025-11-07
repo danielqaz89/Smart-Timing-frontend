@@ -208,13 +208,20 @@ function ReportsCard() {
   );
 }
 
-function SendButton({ onSend, month }: { onSend: (to: string) => Promise<boolean>, month: string }) {
+type Recipients = { to: string; cc?: string; bcc?: string };
+
+function SendButton({ onSend, month, enforceRecipients, enforced }:{ onSend: (rcp: Recipients) => Promise<boolean>, month: string, enforceRecipients?: boolean, enforced?: Partial<Recipients> }) {
   const [to, setTo] = React.useState('');
+  const [cc, setCc] = React.useState('');
+  const [bcc, setBcc] = React.useState('');
   const [busy, setBusy] = React.useState(false);
+  const disabled = !!enforceRecipients;
   return (
-    <Stack direction={{ xs:'column', md:'row' }} spacing={1} alignItems="center">
-      <TextField size="small" label="Send til (e‑post)" value={to} onChange={(e)=>setTo(e.target.value)} sx={{ minWidth: 280 }} />
-      <Button variant="contained" disabled={busy || !to} onClick={async ()=>{ setBusy(true); const ok = await onSend(to); setBusy(false); }}>
+    <Stack direction={{ xs:'column', md:'row' }} spacing={1} alignItems="center" sx={{ width:'100%' }}>
+      <TextField size="small" label={disabled ? `Til (overstyrt: ${enforced?.to || 'policy'})` : 'Send til (e‑post)'} value={disabled ? (enforced?.to || '') : to} onChange={(e)=>setTo(e.target.value)} sx={{ minWidth: 240, flex: 1 }} disabled={disabled} />
+      <TextField size="small" label={disabled ? 'CC (overstyrt)' : 'CC (valgfritt)'} value={disabled ? (enforced?.cc || '') : cc} onChange={(e)=>setCc(e.target.value)} sx={{ minWidth: 200, flex: 1 }} disabled={disabled} />
+      <TextField size="small" label={disabled ? 'BCC (overstyrt)' : 'BCC (valgfritt)'} value={disabled ? (enforced?.bcc || '') : bcc} onChange={(e)=>setBcc(e.target.value)} sx={{ minWidth: 200, flex: 1 }} disabled={disabled} />
+      <Button variant="contained" disabled={busy || (!disabled && !to)} onClick={async ()=>{ setBusy(true); const ok = await onSend({ to, cc, bcc }); setBusy(false); }}>
         {busy ? 'Sender…' : `Send i design (${month})`}
       </Button>
     </Stack>
@@ -233,7 +240,9 @@ function TemplatesCard() {
   });
   const [users, setUsers] = React.useState<any[]>([]);
   const [userId, setUserId] = React.useState<number|''>('');
+  const [policy, setPolicy] = React.useState<any>(null);
   React.useEffect(()=>{ (async ()=>{ const res = await fetchWithAuth(`${API_BASE}/api/company/users`); const data = await res.json(); if (res.ok) setUsers(data.users||[]); })(); }, []);
+  React.useEffect(()=>{ (async ()=>{ try { const res = await fetchWithAuth(`${API_BASE}/api/company/policy`); const p = await res.json(); if (res.ok) setPolicy(p); } catch {} })(); }, []);
   React.useEffect(()=>{ (async ()=>{
     const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}`);
     const data = await res.json();
@@ -257,8 +266,8 @@ function TemplatesCard() {
       const a = document.createElement('a'); a.href = url; a.download = `${type}.pdf`; a.click(); URL.revokeObjectURL(url);
     }
   }
-  async function sendDesigned(to: string) {
-    const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}/send`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ to, month, company_user_id: userId || undefined, template_html: html, template_css: css }) });
+  async function sendDesigned(rcp: Recipients) {
+    const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}/send`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ to: rcp.to, cc: rcp.cc || undefined, bcc: rcp.bcc || undefined, month, company_user_id: userId || undefined, template_html: html, template_css: css }) });
     return res.ok;
   }
   return (
@@ -291,8 +300,19 @@ function TemplatesCard() {
             <Button onClick={save} variant="contained">Lagre</Button>
             <Button onClick={preview} variant="outlined" disabled={loading}>{loading ? 'Forhåndsviser...' : 'Forhåndsvis'}</Button>
             <Button onClick={downloadPdf} variant="outlined">Last ned PDF</Button>
-            <SendButton onSend={sendDesigned} month={month} />
+            <SendButton onSend={sendDesigned} month={month} enforceRecipients={!!policy?.enforce_timesheet_recipient} enforced={{ to: policy?.enforced_timesheet_to, cc: policy?.enforced_timesheet_cc, bcc: policy?.enforced_timesheet_bcc }} />
           </Stack>
+          {policy?.enforce_timesheet_recipient ? (
+            <Typography variant="caption" color="text.secondary">
+              Mottakere overstyres av bedriftspolicy: {policy?.enforced_timesheet_to || '—'}
+              {policy?.enforced_timesheet_cc ? ` • CC: ${policy.enforced_timesheet_cc}` : ''}
+              {policy?.enforced_timesheet_bcc ? ` • BCC: ${policy.enforced_timesheet_bcc}` : ''}
+            </Typography>
+          ) : (
+            <Typography variant="caption" color="text.secondary">
+              Angi To/CC/BCC fritt. Policy kan overstyre dette dersom aktivert.
+            </Typography>
+          )}
           <Typography variant="subtitle2">Forhåndsvisning</Typography>
           <Box sx={{ border:'1px solid', borderColor:'divider', borderRadius:1, height: 400, overflow:'auto' }}>
             <iframe title="preview" style={{ width:'100%', height:400, border:'none' }} srcDoc={previewHtml}></iframe>
