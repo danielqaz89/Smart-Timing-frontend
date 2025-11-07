@@ -208,6 +208,95 @@ function ReportsCard() {
   );
 }
 
+function TemplatesCard() {
+  const { fetchWithAuth } = useCompany();
+  const [type, setType] = React.useState<'timesheet'|'report'>('timesheet');
+  const [html, setHtml] = React.useState('<style>body{font-family:Arial}</style>\n<h1>{{company.name}}</h1>');
+  const [previewHtml, setPreviewHtml] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  React.useEffect(()=>{ (async ()=>{
+    const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}`);
+    const data = await res.json();
+    if (res.ok && data?.template_html) setHtml(data.template_html);
+  })(); }, [type]);
+  async function save() {
+    await fetchWithAuth(`${API_BASE}/api/company/templates/${type}`, { method:'PUT', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ template_html: html, is_active: true }) });
+  }
+  async function preview() {
+    setLoading(true);
+    const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}/preview`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ template_html: html }) });
+    const data = await res.json();
+    if (res.ok) setPreviewHtml(data.html);
+    setLoading(false);
+  }
+  async function downloadPdf() {
+    const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}/pdf`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ template_html: html }) });
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `${type}.pdf`; a.click(); URL.revokeObjectURL(url);
+    }
+  }
+  return (
+    <Card>
+      <CardHeader title="Dokumentmaler (HTML/CSS)" subheader="Bruk handlebars-plassholdere som {{company.name}}, {{period.month_label}}, {{totals.total_hours}}, {{#each rows}}{{/each}}" />
+      <CardContent>
+        <Stack spacing={2}>
+          <FormControl sx={{ maxWidth: 240 }}>
+            <InputLabel>Dokumenttype</InputLabel>
+            <Select label="Dokumenttype" value={type} onChange={(e)=>setType(e.target.value as any)}>
+              <MenuItem value="timesheet">Timeliste</MenuItem>
+              <MenuItem value="report">Rapport</MenuItem>
+            </Select>
+          </FormControl>
+          <TextField label="HTML-mal" multiline minRows={16} value={html} onChange={(e)=>setHtml(e.target.value)} fullWidth />
+          <Stack direction="row" spacing={1}>
+            <Button onClick={save} variant="contained">Lagre</Button>
+            <Button onClick={preview} variant="outlined" disabled={loading}>{loading ? 'Forhåndsviser...' : 'Forhåndsvis'}</Button>
+            <Button onClick={downloadPdf} variant="outlined">Last ned PDF</Button>
+          </Stack>
+          <Typography variant="subtitle2">Forhåndsvisning</Typography>
+          <Box sx={{ border:'1px solid', borderColor:'divider', borderRadius:1, height: 400, overflow:'auto' }}>
+            <iframe title="preview" style={{ width:'100%', height:400, border:'none' }} srcDoc={previewHtml}></iframe>
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PolicyCard() {
+  const { fetchWithAuth } = useCompany();
+  const [enforce, setEnforce] = React.useState(false);
+  const [rate, setRate] = React.useState<string>('');
+  React.useEffect(()=>{ (async ()=>{
+    const res = await fetchWithAuth(`${API_BASE}/api/company/policy`);
+    const data = await res.json();
+    if (res.ok) { setEnforce(!!data.enforce_hourly_rate); setRate(data.hourly_rate ? String(data.hourly_rate) : ''); }
+  })(); }, []);
+  async function save() {
+    await fetchWithAuth(`${API_BASE}/api/company/policy`, { method:'PUT', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ enforce_hourly_rate: enforce, hourly_rate: rate ? Number(rate) : null }) });
+  }
+  return (
+    <Card>
+      <CardHeader title="Bedriftspolicy" subheader="Overstyr timesats for alle brukere i bedriften" />
+      <CardContent>
+        <Stack direction={{ xs:'column', md:'row' }} spacing={2}>
+          <FormControl sx={{ minWidth: 200 }}>
+            <InputLabel>Overstyr timesats</InputLabel>
+            <Select label="Overstyr timesats" value={enforce ? 'yes' : 'no'} onChange={(e)=>setEnforce(e.target.value==='yes')}>
+              <MenuItem value="no">Nei</MenuItem>
+              <MenuItem value="yes">Ja</MenuItem>
+            </Select>
+          </FormControl>
+          <TextField type="number" label="Timesats (kr/t)" value={rate} onChange={(e)=>setRate(e.target.value)} disabled={!enforce} />
+          <Button variant="contained" onClick={save}>Lagre policy</Button>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
 function PortalContent() {
   const { loading, token, company, user, login, logout, fetchWithAuth } = useCompany();
   const [users, setUsers] = React.useState<any[]>([]);
@@ -298,6 +387,10 @@ function PortalContent() {
       </Card>
 
       <AuditCard />
+
+      <PolicyCard />
+
+      <TemplatesCard />
 
       <LogTimeCard />
 
