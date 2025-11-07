@@ -2,7 +2,7 @@
 
 import React from "react";
 import { CompanyProvider, useCompany } from "../../contexts/CompanyContext";
-import { Box, Button, Card, CardContent, CardHeader, CircularProgress, Container, Stack, TextField, Typography } from "@mui/material";
+import { Box, Button, Card, CardContent, CardHeader, CircularProgress, Container, Stack, TextField, Typography, MenuItem, Select, FormControl, InputLabel } from "@mui/material";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
 
@@ -112,6 +112,102 @@ function LogsCard() {
   );
 }
 
+function LogTimeCard() {
+  const { fetchWithAuth, user } = useCompany();
+  const [cases, setCases] = React.useState<any[]>([]);
+  const [busy, setBusy] = React.useState(false);
+  const [form, setForm] = React.useState({
+    date: new Date().toISOString().slice(0,10), start: '09:00', end: '17:00', breakHours: 0,
+    activity: 'Work', title: '', case_id: ''
+  });
+  React.useEffect(()=>{ (async ()=>{
+    const res = await fetchWithAuth(`${API_BASE}/api/company/my-cases`);
+    const data = await res.json();
+    if (res.ok) setCases(data.cases || []);
+  })(); }, []);
+  async function submit() {
+    setBusy(true);
+    try {
+      const payload:any = { ...form, breakHours: Number(form.breakHours)||0 };
+      if (user?.id) payload.company_user_id = user.id;
+      const res = await fetch(`${API_BASE}/api/logs`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
+      if (!res.ok) throw new Error('Kunne ikke lagre');
+      setForm({ ...form, title: '', case_id: '' });
+    } catch (e:any) { /* ignore or show toast */ } finally { setBusy(false); }
+  }
+  return (
+    <Card>
+      <CardHeader title="Logg tid (portal)" subheader="Velg saksnummer og registrer timer" />
+      <CardContent>
+        <Stack direction={{ xs:'column', md:'row' }} spacing={2}>
+          <TextField label="Dato" type="date" value={form.date} onChange={(e)=>setForm({...form, date: e.target.value})} InputLabelProps={{ shrink: true }} />
+          <TextField label="Inn" value={form.start} onChange={(e)=>setForm({...form, start: e.target.value})} placeholder="HH:MM" />
+          <TextField label="Ut" value={form.end} onChange={(e)=>setForm({...form, end: e.target.value})} placeholder="HH:MM" />
+          <TextField label="Pause (timer)" type="number" value={form.breakHours} onChange={(e)=>setForm({...form, breakHours: e.target.value as any})} />
+        </Stack>
+        <Stack direction={{ xs:'column', md:'row' }} spacing={2} sx={{ mt:2 }}>
+          <FormControl sx={{ minWidth: 200 }}>
+            <InputLabel>Saksnummer</InputLabel>
+            <Select label="Saksnummer" value={form.case_id} onChange={(e)=>setForm({...form, case_id: String(e.target.value) })} displayEmpty renderValue={(val)=> val || 'Velg saksnummer'}>
+              {cases.map((c:any)=> (
+                <MenuItem key={c.id} value={c.case_id}>{c.case_id}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl sx={{ minWidth: 160 }}>
+            <InputLabel>Aktivitet</InputLabel>
+            <Select label="Aktivitet" value={form.activity} onChange={(e)=>setForm({...form, activity: String(e.target.value) })}>
+              <MenuItem value="Work">Arbeid</MenuItem>
+              <MenuItem value="Meeting">Møte</MenuItem>
+            </Select>
+          </FormControl>
+          <TextField label="Tittel" value={form.title} onChange={(e)=>setForm({...form, title: e.target.value})} fullWidth />
+          <Button variant="contained" onClick={submit} disabled={busy}>Registrer</Button>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReportsCard() {
+  const { fetchWithAuth } = useCompany();
+  const [month, setMonth] = React.useState(() => {
+    const d = new Date();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    return `${d.getFullYear()}${m}`;
+  });
+  const [rows, setRows] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  React.useEffect(()=>{ (async ()=>{
+    setLoading(true);
+    const res = await fetchWithAuth(`${API_BASE}/api/company/reports/case-monthly?month=${month}`);
+    const data = await res.json();
+    if (res.ok) setRows(data.totals||[]);
+    setLoading(false);
+  })(); }, [month]);
+  return (
+    <Card>
+      <CardHeader title="Rapport: Timer per saksnummer" />
+      <CardContent>
+        <Stack direction={{ xs:'column', md:'row' }} spacing={2} sx={{ mb:2 }}>
+          <TextField label="Måned (YYYYMM)" value={month} onChange={(e)=>setMonth(e.target.value)} />
+        </Stack>
+        {loading ? <CircularProgress size={20} /> : (
+          <Stack spacing={1}>
+            {rows.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">Ingen data.</Typography>
+            ) : rows.map((r:any)=>(
+              <Box key={r.case_id} sx={{ p:1, border:'1px solid', borderColor:'divider', borderRadius:1 }}>
+                <Typography variant="body2"><strong>{r.case_id}</strong> — {Number(r.hours).toFixed(2)} t</Typography>
+              </Box>
+            ))}
+          </Stack>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function PortalContent() {
   const { loading, token, company, user, login, logout, fetchWithAuth } = useCompany();
   const [users, setUsers] = React.useState<any[]>([]);
@@ -203,7 +299,11 @@ function PortalContent() {
 
       <AuditCard />
 
+      <LogTimeCard />
+
       <LogsCard />
+
+      <ReportsCard />
 
       <Card>
         <CardHeader title="Brukere" />
