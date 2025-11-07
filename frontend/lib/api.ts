@@ -15,8 +15,11 @@ export type LogRow = {
   created_at: string;
 };
 
-export async function fetchLogs(month?: string): Promise<LogRow[]> {
-  const qs = month ? `?month=${month}` : "";
+export async function fetchLogs(month?: string, archived?: boolean): Promise<LogRow[]> {
+  const params = new URLSearchParams();
+  if (month) params.append('month', month);
+  if (archived !== undefined) params.append('archived', String(archived));
+  const qs = params.toString() ? `?${params.toString()}` : '';
   const res = await fetch(`${API_BASE}/api/logs${qs}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to load logs");
   return res.json();
