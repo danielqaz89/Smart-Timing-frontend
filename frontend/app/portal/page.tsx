@@ -208,34 +208,58 @@ function ReportsCard() {
   );
 }
 
+function SendButton({ onSend, month }: { onSend: (to: string) => Promise<boolean>, month: string }) {
+  const [to, setTo] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  return (
+    <Stack direction={{ xs:'column', md:'row' }} spacing={1} alignItems="center">
+      <TextField size="small" label="Send til (e‑post)" value={to} onChange={(e)=>setTo(e.target.value)} sx={{ minWidth: 280 }} />
+      <Button variant="contained" disabled={busy || !to} onClick={async ()=>{ setBusy(true); const ok = await onSend(to); setBusy(false); }}>
+        {busy ? 'Sender…' : `Send i design (${month})`}
+      </Button>
+    </Stack>
+  );
+}
+
 function TemplatesCard() {
   const { fetchWithAuth } = useCompany();
   const [type, setType] = React.useState<'timesheet'|'report'>('timesheet');
-  const [html, setHtml] = React.useState('<style>body{font-family:Arial}</style>\n<h1>{{company.name}}</h1>');
+  const [html, setHtml] = React.useState('<h1>{{company.name}}</h1>');
+  const [css, setCss] = React.useState('body{font-family:Arial}');
   const [previewHtml, setPreviewHtml] = React.useState('');
   const [loading, setLoading] = React.useState(false);
+  const [month, setMonth] = React.useState(() => {
+    const d = new Date(); const m = String(d.getMonth()+1).padStart(2,'0'); return `${d.getFullYear()}${m}`;
+  });
+  const [users, setUsers] = React.useState<any[]>([]);
+  const [userId, setUserId] = React.useState<number|''>('');
+  React.useEffect(()=>{ (async ()=>{ const res = await fetchWithAuth(`${API_BASE}/api/company/users`); const data = await res.json(); if (res.ok) setUsers(data.users||[]); })(); }, []);
   React.useEffect(()=>{ (async ()=>{
     const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}`);
     const data = await res.json();
-    if (res.ok && data?.template_html) setHtml(data.template_html);
+    if (res.ok) { if (data?.template_html) setHtml(data.template_html); if (data?.template_css) setCss(data.template_css); }
   })(); }, [type]);
   async function save() {
-    await fetchWithAuth(`${API_BASE}/api/company/templates/${type}`, { method:'PUT', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ template_html: html, is_active: true }) });
+    await fetchWithAuth(`${API_BASE}/api/company/templates/${type}`, { method:'PUT', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ template_html: html, template_css: css, is_active: true }) });
   }
   async function preview() {
     setLoading(true);
-    const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}/preview`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ template_html: html }) });
+    const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}/preview`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ template_html: html, template_css: css, month, company_user_id: userId || undefined }) });
     const data = await res.json();
     if (res.ok) setPreviewHtml(data.html);
     setLoading(false);
   }
   async function downloadPdf() {
-    const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}/pdf`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ template_html: html }) });
+    const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}/pdf`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ template_html: html, template_css: css, month, company_user_id: userId || undefined }) });
     if (res.ok) {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = `${type}.pdf`; a.click(); URL.revokeObjectURL(url);
     }
+  }
+  async function sendDesigned(to: string) {
+    const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}/send`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ to, month, company_user_id: userId || undefined, template_html: html, template_css: css }) });
+    return res.ok;
   }
   return (
     <Card>
@@ -249,11 +273,25 @@ function TemplatesCard() {
               <MenuItem value="report">Rapport</MenuItem>
             </Select>
           </FormControl>
-          <TextField label="HTML-mal" multiline minRows={16} value={html} onChange={(e)=>setHtml(e.target.value)} fullWidth />
-          <Stack direction="row" spacing={1}>
+          <Stack direction={{ xs:'column', md:'row' }} spacing={2}>
+            <TextField label="Måned (YYYYMM)" value={month} onChange={(e)=>setMonth(e.target.value)} sx={{ maxWidth: 200 }} />
+            <FormControl sx={{ minWidth: 240 }}>
+              <InputLabel>Avgrens til bruker (valgfritt)</InputLabel>
+              <Select label="Avgrens til bruker (valgfritt)" value={userId === '' ? '' : String(userId)} onChange={(e)=>setUserId(e.target.value ? Number(e.target.value) : '')} displayEmpty>
+                <MenuItem value="">Alle brukere</MenuItem>
+                {users.map((u:any)=> (
+                  <MenuItem key={u.id} value={u.id}>{u.user_email}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Stack>
+          <TextField label="HTML-mal" multiline minRows={12} value={html} onChange={(e)=>setHtml(e.target.value)} fullWidth />
+          <TextField label="CSS (print CSS støttes)" multiline minRows={6} value={css} onChange={(e)=>setCss(e.target.value)} fullWidth />
+          <Stack direction={{ xs:'column', md:'row' }} spacing={1}>
             <Button onClick={save} variant="contained">Lagre</Button>
             <Button onClick={preview} variant="outlined" disabled={loading}>{loading ? 'Forhåndsviser...' : 'Forhåndsvis'}</Button>
             <Button onClick={downloadPdf} variant="outlined">Last ned PDF</Button>
+            <SendButton onSend={sendDesigned} month={month} />
           </Stack>
           <Typography variant="subtitle2">Forhåndsvisning</Typography>
           <Box sx={{ border:'1px solid', borderColor:'divider', borderRadius:1, height: 400, overflow:'auto' }}>
