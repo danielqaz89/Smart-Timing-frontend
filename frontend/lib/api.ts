@@ -36,11 +36,15 @@ export async function createLog(payload: {
   place?: string;
   notes?: string;
   expenseCoverage?: number;
+  caseId?: string; // optional Klient ID / case number
 }) {
   const res = await fetch(`${API_BASE}/api/logs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      case_id: (payload as any).case_id ?? payload.caseId ?? undefined,
+    }),
   });
   if (!res.ok) throw new Error("Failed to create log");
   return res.json();
