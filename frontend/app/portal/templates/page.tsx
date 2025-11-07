@@ -99,6 +99,30 @@ function TemplatesContent() {
   const [users, setUsers] = useState<any[]>([]);
   const [userId, setUserId] = useState<number | ''>('');
   const [policy, setPolicy] = useState<any>(null);
+  
+  // Report configuration
+  const [showConfig, setShowConfig] = useState(false);
+  const [reportConfig, setReportConfig] = useState({
+    includeColumns: {
+      date: true,
+      start_time: true,
+      end_time: true,
+      break_hours: true,
+      hours: true,
+      activity: true,
+      title: false,
+      project: false,
+      place: false,
+      case_id: true,
+      notes: false,
+      user_email: false,
+    },
+    groupBy: 'none' as 'none' | 'case_id' | 'user_email' | 'activity',
+    showTotals: true,
+    showSummary: true,
+    includeWeekends: true,
+    sortBy: 'date' as 'date' | 'hours' | 'case_id',
+  });
 
   useEffect(() => {
     (async () => {
@@ -504,26 +528,125 @@ tr:nth-child(even) {
 
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
             <TextField
-              label="Month (YYYYMM)"
+              label="Måned (YYYYMM)"
               value={month}
               onChange={(e) => setMonth(e.target.value)}
               sx={{ maxWidth: 200 }}
             />
             <FormControl sx={{ minWidth: 240 }}>
-              <InputLabel>Filter by User (optional)</InputLabel>
+              <InputLabel>Filtrer på bruker (valgfritt)</InputLabel>
               <Select
-                label="Filter by User (optional)"
+                label="Filtrer på bruker (valgfritt)"
                 value={userId === '' ? '' : String(userId)}
                 onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : '')}
                 displayEmpty
               >
-                <MenuItem value="">All Users</MenuItem>
+                <MenuItem value="">Alle brukere</MenuItem>
                 {users.map((u: any) => (
                   <MenuItem key={u.id} value={u.id}>{u.user_email}</MenuItem>
                 ))}
               </Select>
             </FormControl>
+            <Button variant="outlined" onClick={() => setShowConfig(!showConfig)}>
+              {showConfig ? 'Skjul' : 'Vis'} rapportinnstillinger
+            </Button>
           </Stack>
+
+          {showConfig && (
+            <Paper sx={{ p: 2, bgcolor: 'background.default' }} variant="outlined">
+              <Typography variant="subtitle2" gutterBottom>Rapportinnhold</Typography>
+              <Typography variant="caption" color="text.secondary" gutterBottom display="block">
+                Velg hvilke kolonner som skal inkluderes i rapporten:
+              </Typography>
+              
+              <Stack direction="row" flexWrap="wrap" gap={2} sx={{ mt: 2 }}>
+                {Object.entries(reportConfig.includeColumns).map(([key, value]) => (
+                  <FormControl key={key} component="label" sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={value}
+                      onChange={(e) => setReportConfig({
+                        ...reportConfig,
+                        includeColumns: { ...reportConfig.includeColumns, [key]: e.target.checked }
+                      })}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Typography variant="body2">{key.replace('_', ' ')}</Typography>
+                  </FormControl>
+                ))}
+              </Stack>
+
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mt: 3 }}>
+                <FormControl sx={{ minWidth: 200 }}>
+                  <InputLabel>Grupper data</InputLabel>
+                  <Select
+                    label="Grupper data"
+                    value={reportConfig.groupBy}
+                    onChange={(e) => setReportConfig({ ...reportConfig, groupBy: e.target.value as any })}
+                  >
+                    <MenuItem value="none">Ingen gruppering</MenuItem>
+                    <MenuItem value="case_id">Per saksnummer</MenuItem>
+                    <MenuItem value="user_email">Per bruker</MenuItem>
+                    <MenuItem value="activity">Per aktivitet</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <FormControl sx={{ minWidth: 200 }}>
+                  <InputLabel>Sorter etter</InputLabel>
+                  <Select
+                    label="Sorter etter"
+                    value={reportConfig.sortBy}
+                    onChange={(e) => setReportConfig({ ...reportConfig, sortBy: e.target.value as any })}
+                  >
+                    <MenuItem value="date">Dato</MenuItem>
+                    <MenuItem value="hours">Timer</MenuItem>
+                    <MenuItem value="case_id">Saksnummer</MenuItem>
+                  </Select>
+                </FormControl>
+              </Stack>
+
+              <Stack direction="row" spacing={3} sx={{ mt: 2 }}>
+                <FormControl component="label">
+                  <Stack direction="row" alignItems="center">
+                    <input
+                      type="checkbox"
+                      checked={reportConfig.showTotals}
+                      onChange={(e) => setReportConfig({ ...reportConfig, showTotals: e.target.checked })}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Typography variant="body2">Vis totaler</Typography>
+                  </Stack>
+                </FormControl>
+                <FormControl component="label">
+                  <Stack direction="row" alignItems="center">
+                    <input
+                      type="checkbox"
+                      checked={reportConfig.showSummary}
+                      onChange={(e) => setReportConfig({ ...reportConfig, showSummary: e.target.checked })}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Typography variant="body2">Vis sammendrag</Typography>
+                  </Stack>
+                </FormControl>
+                <FormControl component="label">
+                  <Stack direction="row" alignItems="center">
+                    <input
+                      type="checkbox"
+                      checked={reportConfig.includeWeekends}
+                      onChange={(e) => setReportConfig({ ...reportConfig, includeWeekends: e.target.checked })}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Typography variant="body2">Inkluder helger</Typography>
+                  </Stack>
+                </FormControl>
+              </Stack>
+
+              <Alert severity="success" sx={{ mt: 2 }}>
+                Disse innstillingene brukes når du genererer forhåndsvisning og PDF. 
+                Du kan også redigere HTML-malen direkte for full kontroll.
+              </Alert>
+            </Paper>
+          )}
 
           <TextField
             label="HTML Template"
