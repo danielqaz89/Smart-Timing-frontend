@@ -1384,7 +1384,7 @@ export default function Home() {
   }
 
   // Quick stamp from FAB
-  async function handleQuickStampFromFAB(template: any) {
+  async function handleQuickStampFromFAB(template: any, caseId?: string) {
     await createLog({
       date: dayjs().format("YYYY-MM-DD"),
       start: dayjs().format("HH:mm"),
@@ -1395,6 +1395,7 @@ export default function Home() {
       project: template.project || undefined,
       place: template.place || undefined,
       notes: undefined,
+      caseId: caseId || undefined,
     });
     await mutate();
     showToast(`Stemplet inn: ${template.activity === 'Work' ? 'Arbeid' : 'Møte'}`);
@@ -2276,6 +2277,7 @@ export default function Home() {
         templates={templates}
         activeStamp={activeStamp}
         onStampIn={handleQuickStampFromFAB}
+        onStampInWithCase={handleQuickStampFromFAB}
         onStampOut={handleStampOutFromFAB}
       />
 

@@ -50,16 +50,32 @@ interface QuickStampFABProps {
   activeStamp: ActiveStamp | undefined;
   onStampIn: (template: QuickTemplate) => Promise<void>;
   onStampOut: () => Promise<void>;
+  onStampInWithCase?: (template: QuickTemplate, caseId?: string) => Promise<void>;
 }
 
 export default function QuickStampFAB({ 
   templates, 
   activeStamp, 
   onStampIn, 
-  onStampOut 
+  onStampOut,
+  onStampInWithCase,
 }: QuickStampFABProps) {
   const [open, setOpen] = useState(false);
   const [elapsedTime, setElapsedTime] = useState("00:00:00");
+  const [caseId, setCaseId] = useState("");
+  const [myCases, setMyCases] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const token = localStorage.getItem('company_token');
+      if (!token) return;
+      (async () => {
+        const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000';
+        const res = await fetch(`${API_BASE}/api/company/my-cases`, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (res.ok && Array.isArray(data.cases)) setMyCases(data.cases.map((c:any)=>c.case_id));
+      })();
+    } catch {}
+  }, []);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
@@ -84,7 +100,8 @@ export default function QuickStampFAB({
   }, [activeStamp]);
 
   const handleStampIn = async (template: QuickTemplate) => {
-    await onStampIn(template);
+    if (onStampInWithCase) await onStampInWithCase(template, caseId || undefined);
+    else await onStampIn(template);
     setOpen(false);
   };
 
@@ -137,6 +154,15 @@ export default function QuickStampFAB({
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Velg mal eller aktivitet:
           </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Saksnummer (valgfritt)
+          </Typography>
+          <Box sx={{ mb: 2 }}>
+            <input list="quick-cases" placeholder="Klient ID" value={caseId} onChange={(e)=>setCaseId((e.target as HTMLInputElement).value)} style={{ width:'100%', padding:8, border:'1px solid #ddd', borderRadius:4 }} />
+            <datalist id="quick-cases">
+              {myCases.map((c)=>(<option key={c} value={c} />))}
+            </datalist>
+          </Box>
           <List>
             {/* Quick Activity Buttons */}
             <ListItem disablePadding sx={{ mb: 1 }}>
