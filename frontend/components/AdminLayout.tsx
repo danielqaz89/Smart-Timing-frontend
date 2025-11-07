@@ -32,6 +32,7 @@ import {
   Palette as ThemeIcon,
   Pages as PagesIcon,
   ContactMail as ContactIcon,
+  PermMedia as MediaIcon,
 } from '@mui/icons-material';
 import { useAdmin } from '../contexts/AdminContext';
 
@@ -50,7 +51,9 @@ const cmsMenuItems = [
   { label: 'Translations', path: '/admin/cms/translations', icon: <TranslateIcon /> },
   { label: 'Themes', path: '/admin/cms/themes', icon: <ThemeIcon /> },
   { label: 'Pages', path: '/admin/cms/pages', icon: <PagesIcon /> },
+  { label: 'Media Library', path: '/admin/cms/media', icon: <MediaIcon /> },
   { label: 'Contact Submissions', path: '/admin/cms/submissions', icon: <ContactIcon /> },
+  { label: 'Company Requests', path: '/admin/cms/company-requests', icon: <BusinessIcon /> },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
