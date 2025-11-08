@@ -1137,12 +1137,6 @@ export default function Home() {
     }
   };
 
-  // Detect active stamp (today's entry with same start/end time)
-  const activeStamp = useMemo(() => {
-    const today = dayjs().format("YYYY-MM-DD");
-    return logs.find(l => l.date === today && l.start_time === l.end_time);
-  }, [logs]);
-
   // Timer for active stamp
   const [elapsedTime, setElapsedTime] = useState("00:00:00");
   useEffect(() => {
@@ -1226,6 +1220,13 @@ export default function Home() {
     
     return filtered;
   }, [allLogs, deferredSearch, viewMode]);
+
+  // Detect active stamp (today's entry with same start/end time)
+  const activeStamp = useMemo(() => {
+    const today = dayjs().format("YYYY-MM-DD");
+    return logs.find(l => l.date === today && l.start_time === l.end_time);
+  }, [logs]);
+
   const totalHours = useMemo(() => {
     return logs.reduce((sum, r) => {
       const d = dayjs(r.date);
