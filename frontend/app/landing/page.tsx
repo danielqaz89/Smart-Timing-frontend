@@ -32,14 +32,14 @@ export default function LandingPage() {
     <Container maxWidth="lg" sx={{ py: 6 }}>
       {sections.sort((a,b)=> (a.order||0)-(b.order||0)).map((s) => (
         <Box key={s.id} sx={{ py: 6 }}>
-          {renderSection(s)}
+          {renderSection(s, t)}
         </Box>
       ))}
     </Container>
   );
 }
 
-function renderSection(s: any) {
+function renderSection(s: any, t: (key: string, fallback?: string) => string) {
   const c = s?.content || {};
   switch (s?.type) {
     case 'hero':
@@ -152,6 +152,7 @@ function renderSection(s: any) {
 }
 
 function ContactForm({ section }: { section: any }) {
+  const { t } = useTranslations();
   const c = section?.content || {};
   const fields: any[] = Array.isArray(c.fields) ? c.fields : [];
   const [values, setValues] = useState<Record<string, any>>({});
