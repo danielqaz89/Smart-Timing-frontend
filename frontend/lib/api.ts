@@ -210,6 +210,8 @@ export type UserSettings = {
   webhook_url: string | null;
   sheet_url: string | null;
   month_nav: string | null;
+  // UI preferences stored server-side as well
+  view_mode?: 'month' | 'week' | null;
   show_archived?: boolean | null;
   language?: 'no' | 'en';
   created_at?: string;
