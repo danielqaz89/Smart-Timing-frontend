@@ -1352,11 +1352,12 @@ export default function Home() {
 
   async function handleBulkDelete() {
     if (!confirm(`${t('confirm.delete_rows', 'Sikker på at du vil slette')} ${selectedIds.size} ${t('table.rows', 'rader')}?`)) return;
-    for (const id of selectedIds) {
+    const ids = Array.from(selectedIds);
+    for (const id of ids) {
       await deleteLog(id);
     }
     await mutate();
-    showToast(`${selectedIds.size} rader slettet`, "success");
+    showToast(`${ids.length} rader slettet`, "success");
     setSelectedIds(new Set());
     setBulkMode(false);
   }
