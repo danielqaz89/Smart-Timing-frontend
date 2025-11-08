@@ -2253,7 +2253,7 @@ updateSettings({ show_archived: v }).catch(() => void 0);
                           <IconButton aria-label={t('aria.edit_row', 'Rediger rad')} size="small" onClick={() => startEdit(r)}>
                             <EditIcon fontSize="small" />
                           </IconButton>
-                          {!showArchived ? (
+                          {!showArchivedLocal ? (
                             <IconButton
                               aria-label={t('aria.archive_row', 'Arkiver rad')}
                               size="small"
