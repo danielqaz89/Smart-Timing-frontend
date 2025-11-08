@@ -1,221 +1,126 @@
-"use client";
+'use client';
 
-import React, { useEffect, useState } from 'react';
-import {
-  Box,
-  Typography,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Button,
-  TextField,
-  Stack,
-  Alert,
-  Chip,
-  CircularProgress,
-  IconButton,
-} from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { useEffect, useState, forwardRef } from 'react';
+import { Box, Typography, Paper, Table, TableBody, TableCell, TableHead, TableRow, IconButton, Chip, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material';
+import { Check, Close, PersonAdd } from '@mui/icons-material';
+import { TableVirtuoso } from 'react-virtuoso';
 import { CompanyProvider, useCompany } from '../../../contexts/CompanyContext';
 import PortalLayout from '../../../components/PortalLayout';
+import { useTranslations } from '../../../contexts/TranslationsContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000';
 
 function UsersContent() {
+  const { t } = useTranslations();
   const { fetchWithAuth } = useCompany();
   const [users, setUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [actionLoading, setActionLoading] = useState(false);
-  const [newCase, setNewCase] = useState<Record<number, string>>({});
-
-  async function loadUsers() {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetchWithAuth(`${API_BASE}/api/company/users`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load users');
-      setUsers(data.users || []);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load users');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [newCase, setNewCase] = useState('');
 
   useEffect(() => {
     loadUsers();
   }, []);
 
-  async function handleApprove(userId: number, approved: boolean) {
-    setActionLoading(true);
-    setError('');
+  const loadUsers = async () => {
     try {
-      const res = await fetchWithAuth(`${API_BASE}/api/company/users/${userId}`, {
+      const res = await fetchWithAuth(`${API_BASE}/api/company/users`);
+      const data = await res.json();
+      setUsers(data.users || []);
+    } catch (error) {
+      console.error('Failed to load users:', error);
+    }
+  };
+
+  const handleApprove = async (id: number) => {
+    try {
+      await fetchWithAuth(`${API_BASE}/api/company/users/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approved }),
+        body: JSON.stringify({ approved: true }),
       });
-      if (!res.ok) throw new Error('Failed to update user');
-      await loadUsers();
-    } catch (e: any) {
-      setError(e?.message || 'Failed to update user');
-    } finally {
-      setActionLoading(false);
+      loadUsers();
+    } catch (error) {
+      console.error('Failed to approve:', error);
     }
-  }
+  };
 
-  async function handleAddCase(userId: number) {
-    const caseId = newCase[userId]?.trim();
-    if (!caseId) return;
-
-    setActionLoading(true);
-    setError('');
+  const handleAddCase = async () => {
+    if (!selectedUser || !newCase) return;
     try {
-      const res = await fetchWithAuth(`${API_BASE}/api/company/users/${userId}/cases`, {
+      await fetchWithAuth(`${API_BASE}/api/company/users/${selectedUser.id}/cases`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ case_id: caseId }),
+        body: JSON.stringify({ case_id: newCase }),
       });
-      if (!res.ok) throw new Error('Failed to add case');
-      
-      setNewCase({ ...newCase, [userId]: '' });
-      await loadUsers();
-    } catch (e: any) {
-      setError(e?.message || 'Failed to add case');
-    } finally {
-      setActionLoading(false);
+      setSelectedUser(null);
+      setNewCase('');
+      loadUsers();
+    } catch (error) {
+      console.error('Failed to add case:', error);
     }
-  }
-
-  async function handleRemoveCase(userId: number, caseDbId: number) {
-    if (!confirm('Remove this case assignment?')) return;
-
-    setActionLoading(true);
-    setError('');
-    try {
-      const res = await fetchWithAuth(`${API_BASE}/api/company/users/${userId}/cases/${caseDbId}`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) throw new Error('Failed to remove case');
-      await loadUsers();
-    } catch (e: any) {
-      setError(e?.message || 'Failed to remove case');
-    } finally {
-      setActionLoading(false);
-    }
-  }
+  };
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>Users</Typography>
+      <Typography variant="h4" gutterBottom>{t('portal.users.title', 'Brukere')}</Typography>
+      <Paper elevation={3} sx={{ height: 600 }}>
+        <TableVirtuoso
+          data={users}
+          components={{
+            Table: (props) => <Table {...props} />,
+            TableHead: TableHead,
+            TableRow: TableRow,
+            TableBody: forwardRef<HTMLTableSectionElement>((props, ref) => <TableBody {...props} ref={ref} />),
+          }}
+          fixedHeaderContent={() => (
+            <TableRow>
+              <TableCell sx={{ bgcolor: 'background.paper', fontWeight: 'bold' }}>{t('table.email', 'E-post')}</TableCell>
+              <TableCell sx={{ bgcolor: 'background.paper', fontWeight: 'bold' }}>{t('table.role', 'Rolle')}</TableCell>
+              <TableCell sx={{ bgcolor: 'background.paper', fontWeight: 'bold' }}>{t('table.status', 'Status')}</TableCell>
+              <TableCell sx={{ bgcolor: 'background.paper', fontWeight: 'bold' }}>{t('table.cases', 'Saker')}</TableCell>
+              <TableCell align="right" sx={{ bgcolor: 'background.paper', fontWeight: 'bold' }}>{t('table.actions', 'Handlinger')}</TableCell>
+            </TableRow>
+          )}
+          itemContent={(index, user) => (
+            <>
+              <TableCell>{user.user_email}</TableCell>
+              <TableCell><Chip label={user.role} size="small" /></TableCell>
+              <TableCell>
+                <Chip 
+                  label={user.approved ? t('common.approved', 'Godkjent') : t('common.pending', 'Venter')} 
+                  color={user.approved ? 'success' : 'warning'}
+                  size="small"
+                />
+              </TableCell>
+              <TableCell>{user.cases?.length || 0}</TableCell>
+              <TableCell align="right">
+                {!user.approved && <IconButton size="small" color="success" onClick={() => handleApprove(user.id)}><Check fontSize="small" /></IconButton>}
+                <IconButton size="small" onClick={() => setSelectedUser(user)}><PersonAdd fontSize="small" /></IconButton>
+              </TableCell>
+            </>
+          )}
+        />
+      </Paper>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
-
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress />
-        </Box>
-      ) : users.length === 0 ? (
-        <Alert severity="info">No users yet. Invite users from the Invites page.</Alert>
-      ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Email</TableCell>
-                <TableCell>Google Email</TableCell>
-                <TableCell>Role</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Assigned Cases</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>{user.user_email}</TableCell>
-                  <TableCell>{user.google_email || '—'}</TableCell>
-                  <TableCell>{user.role}</TableCell>
-                  <TableCell>
-                    {user.approved ? (
-                      <Chip label="Approved" color="success" size="small" />
-                    ) : (
-                      <Chip label="Pending" color="warning" size="small" />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Stack spacing={1}>
-                      <Stack direction="row" spacing={0.5} flexWrap="wrap">
-                        {(user.cases || []).map((c: any) => (
-                          <Chip
-                            key={c.id}
-                            label={c.case_id}
-                            size="small"
-                            onDelete={() => handleRemoveCase(user.id, c.id)}
-                            disabled={actionLoading}
-                          />
-                        ))}
-                      </Stack>
-                      <Stack direction="row" spacing={1}>
-                        <TextField
-                          size="small"
-                          placeholder="Add case ID"
-                          value={newCase[user.id] || ''}
-                          onChange={(e) => setNewCase({ ...newCase, [user.id]: e.target.value })}
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddCase(user.id)}
-                          sx={{ minWidth: 150 }}
-                        />
-                        <IconButton
-                          size="small"
-                          color="primary"
-                          onClick={() => handleAddCase(user.id)}
-                          disabled={actionLoading || !newCase[user.id]?.trim()}
-                        >
-                          <AddIcon />
-                        </IconButton>
-                      </Stack>
-                    </Stack>
-                  </TableCell>
-                  <TableCell align="right">
-                    {!user.approved ? (
-                      <Button
-                        size="small"
-                        variant="contained"
-                        color="success"
-                        onClick={() => handleApprove(user.id, true)}
-                        disabled={actionLoading}
-                      >
-                        Approve
-                      </Button>
-                    ) : (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="warning"
-                        onClick={() => handleApprove(user.id, false)}
-                        disabled={actionLoading}
-                      >
-                        Revoke
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+      <Dialog open={!!selectedUser} onClose={() => setSelectedUser(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>{t('portal.users.assign_case', 'Tildel sak')}</DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth
+            label={t('fields.case_id', 'Saksnummer')}
+            value={newCase}
+            onChange={(e) => setNewCase(e.target.value)}
+            margin="normal"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSelectedUser(null)}>{t('common.cancel', 'Avbryt')}</Button>
+          <Button onClick={handleAddCase} variant="contained">{t('common.add', 'Legg til')}</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
 
-export default function PortalUsersPage() {
+export default function UsersPage() {
   return (
     <CompanyProvider>
       <PortalLayout>

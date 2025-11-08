@@ -22,42 +22,40 @@ import {
 import {
   Dashboard as DashboardIcon,
   People as PeopleIcon,
-  Settings as SettingsIcon,
-  BarChart as AnalyticsIcon,
-  ExitToApp as LogoutIcon,
+  Business as CompaniesIcon,
   AdminPanelSettings as AdminIcon,
+  SupervisorAccount as SuperAdminIcon,
+  ExitToApp as LogoutIcon,
   History as HistoryIcon,
-  Business as BusinessIcon,
-  Language as TranslateIcon,
-  Palette as ThemeIcon,
-  Pages as PagesIcon,
-  ContactMail as ContactIcon,
-  PermMedia as MediaIcon,
+  Settings as SettingsIcon,
+  Article as PagesIcon,
+  Palette as ThemesIcon,
+  Translate as TranslateIcon,
+  Image as MediaIcon,
 } from '@mui/icons-material';
 import { useAdmin } from '../contexts/AdminContext';
+import { useLanguage } from '../contexts/LanguageContext';
+import { useTranslations } from '../contexts/TranslationsContext';
 
 const DRAWER_WIDTH = 240;
 
-const menuItems = [
-  { label: 'Dashboard', path: '/admin/dashboard', icon: <DashboardIcon /> },
-  { label: 'Users', path: '/admin/users', icon: <PeopleIcon /> },
-  { label: 'Companies', path: '/admin/companies', icon: <BusinessIcon /> },
-  { label: 'Company Requests', path: '/admin/company-requests', icon: <BusinessIcon /> },
-  { label: 'Analytics', path: '/admin/analytics', icon: <AnalyticsIcon /> },
-  { label: 'Audit Log', path: '/admin/audit', icon: <HistoryIcon /> },
-  { label: 'Settings', path: '/admin/settings', icon: <SettingsIcon /> },
-];
-
-const cmsMenuItems = [
-  { label: 'Translations', path: '/admin/cms/translations', icon: <TranslateIcon /> },
-  { label: 'Themes', path: '/admin/cms/themes', icon: <ThemeIcon /> },
-  { label: 'Pages', path: '/admin/cms/pages', icon: <PagesIcon /> },
-  { label: 'Media Library', path: '/admin/cms/media', icon: <MediaIcon /> },
-  { label: 'Contact Submissions', path: '/admin/cms/submissions', icon: <ContactIcon /> },
+const menuItems: Array<{ key: string; label: string; path: string; icon: React.ReactNode; requireRole?: string }> = [
+  { key: 'admin.dashboard', label: 'Dashboard', path: '/admin/dashboard', icon: <DashboardIcon /> },
+  { key: 'admin.users', label: 'Users', path: '/admin/users', icon: <PeopleIcon /> },
+  { key: 'admin.companies', label: 'Companies', path: '/admin/companies', icon: <CompaniesIcon /> },
+  { key: 'admin.audit_log', label: 'Audit Log', path: '/admin/audit', icon: <HistoryIcon /> },
+  { key: 'admin.settings', label: 'Settings', path: '/admin/settings', icon: <SettingsIcon /> },
+  { key: 'admin.cms_pages', label: 'CMS Pages', path: '/admin/cms/pages', icon: <PagesIcon /> },
+  { key: 'admin.cms_themes', label: 'CMS Themes', path: '/admin/cms/themes', icon: <ThemesIcon /> },
+  { key: 'admin.cms_translations', label: 'CMS Translations', path: '/admin/cms/translations', icon: <TranslateIcon /> },
+  { key: 'admin.cms_media', label: 'CMS Media', path: '/admin/cms/media', icon: <MediaIcon /> },
+  { key: 'admin.admins', label: 'Admins', path: '/admin/admins', icon: <SuperAdminIcon />, requireRole: 'super_admin' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { admin, loading, logout } = useAdmin();
+  const { language, setLanguage } = useLanguage();
+  const { t } = useTranslations();
   const router = useRouter();
   const pathname = usePathname();
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
@@ -98,9 +96,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* App Bar */}
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar>
-          <AdminIcon sx={{ mr: 2 }} />
+          <Box sx={{ mr: 2, display: 'flex', alignItems: 'center' }}>
+            <img src="/icons/logo.svg" alt="Smart Timing" style={{ height: 28 }} />
+          </Box>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            Smart Timing Admin
+            {t('admin.title', 'Smart Timing Admin')}
           </Typography>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -119,9 +119,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             open={Boolean(anchorEl)}
             onClose={handleProfileMenuClose}
           >
+            <MenuItem onClick={() => { setLanguage(language === 'no' ? 'en' : 'no'); handleProfileMenuClose(); }}>
+              <TranslateIcon sx={{ mr: 1 }} fontSize="small" />
+              {language === 'no' ? t('common.switch_to_english', 'Switch to English') : t('common.switch_to_norwegian', 'Bytt til Norsk')}
+            </MenuItem>
             <MenuItem onClick={handleLogout}>
               <LogoutIcon sx={{ mr: 1 }} fontSize="small" />
-              Logout
+              {t('common.logout', 'Logg ut')}
             </MenuItem>
           </Menu>
         </Toolbar>
@@ -142,34 +146,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <Toolbar />
         <Box sx={{ overflow: 'auto' }}>
           <List>
-            {menuItems.map((item) => (
-              <ListItem key={item.path} disablePadding>
-                <ListItemButton
-                  selected={pathname === item.path}
-                  onClick={() => router.push(item.path)}
-                >
-                  <ListItemIcon>{item.icon}</ListItemIcon>
-                  <ListItemText primary={item.label} />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-          <Divider sx={{ my: 1 }} />
-          <Typography variant="caption" sx={{ px: 2, py: 1, display: 'block', color: 'text.secondary' }}>
-            CMS
-          </Typography>
-          <List>
-            {cmsMenuItems.map((item) => (
-              <ListItem key={item.path} disablePadding>
-                <ListItemButton
-                  selected={pathname === item.path}
-                  onClick={() => router.push(item.path)}
-                >
-                  <ListItemIcon>{item.icon}</ListItemIcon>
-                  <ListItemText primary={item.label} />
-                </ListItemButton>
-              </ListItem>
-            ))}
+            {menuItems
+              .filter((item) => !item.requireRole || admin?.role === item.requireRole)
+              .map((item) => (
+                <ListItem key={item.path} disablePadding>
+                  <ListItemButton
+                    selected={pathname === item.path}
+                    onClick={() => router.push(item.path)}
+                  >
+                    <ListItemIcon>{item.icon}</ListItemIcon>
+                    <ListItemText primary={t(item.key, item.label)} />
+                  </ListItemButton>
+                </ListItem>
+              ))}
           </List>
         </Box>
       </Drawer>

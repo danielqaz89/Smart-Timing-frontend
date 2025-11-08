@@ -1,78 +1,96 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Box, Typography, Paper, Button, TextField, Alert } from '@mui/material';
-import { Save as SaveIcon } from '@mui/icons-material';
+import React, { useEffect, useState } from 'react';
+import { Box, Typography, TextField, Button } from '@mui/material';
+import { useSnackbar } from 'notistack';
+import { AdminProvider, useAdmin } from '../../../../contexts/AdminContext';
 import AdminLayout from '../../../../components/AdminLayout';
+import { useTranslations } from '../../../../contexts/TranslationsContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000';
 
-export default function CmsTranslationsPage() {
-  const [content, setContent] = useState('');
-  const [loading, setLoading] = useState(false);
+function CmsTranslationsContent() {
+  const { fetchWithAuth } = useAdmin();
+  const { enqueueSnackbar } = useSnackbar();
+  const { t } = useTranslations();
+  const [translations, setTranslations] = useState<any>({});
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    fetchTranslations();
-  }, []);
-
-  async function fetchTranslations() {
-    setLoading(true);
+  const load = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/admin/cms/translations`);
-      if (!res.ok) throw new Error('Failed to fetch');
+      const res = await fetchWithAuth(`${API_BASE}/api/admin/cms/translations`);
       const data = await res.json();
-      setContent(JSON.stringify(data, null, 2));
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      setTranslations(data);
+    } catch (e: any) { enqueueSnackbar(e.message || 'Failed to load', { variant: 'error' }); }
+  };
 
-  async function handleSave() {
-    setLoading(true);
-    setError('');
-    setSuccess('');
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
     try {
-      const token = localStorage.getItem('admin_token');
-      const parsed = JSON.parse(content);
-      const res = await fetch(`${API_BASE}/api/admin/cms/translations`, {
+      const res = await fetchWithAuth(`${API_BASE}/api/admin/cms/translations`, {
         method: 'PUT',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(parsed),
+        body: JSON.stringify(translations),
       });
-      if (!res.ok) throw new Error('Failed to save');
-      setSuccess('Translations saved!');
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed to save');
+      enqueueSnackbar('Translations saved', { variant: 'success' });
+    } catch (e: any) { enqueueSnackbar(e.message || 'Failed to save', { variant: 'error' }); }
+  };
 
   return (
-    <AdminLayout>
-      <Box>
-        <Typography variant="h4" gutterBottom>Translations (i18n)</Typography>
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-        {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
-        <Button variant="contained" startIcon={<SaveIcon />} onClick={handleSave} disabled={loading} sx={{ mb: 2 }}>
-          Save
-        </Button>
-        <Paper sx={{ p: 2 }}>
-          <TextField
-            fullWidth
-            multiline
-            rows={30}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            disabled={loading}
-            InputProps={{ sx: { fontFamily: 'monospace', fontSize: 13 } }}
-          />
-        </Paper>
+    <Box>
+      <Typography variant="h4" gutterBottom>{t('admin.cms.translations.title', 'CMS Translations')}</Typography>
+
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+        <Button variant="contained" onClick={save}>{t('common.save_all', 'Save All')}</Button>
+        <Button variant="outlined" onClick={load}>{t('common.reload', 'Reload')}</Button>
       </Box>
-    </AdminLayout>
+
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ borderBottom: '2px solid #eee' }}>
+            <th style={{ textAlign: 'left', padding: 8 }}>{t('table.key', 'Key')}</th>
+            <th style={{ textAlign: 'left', padding: 8 }}>{t('table.category', 'Category')}</th>
+            <th style={{ textAlign: 'left', padding: 8 }}>NO</th>
+            <th style={{ textAlign: 'left', padding: 8 }}>EN</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.values(translations).map((t: any) => (
+            <tr key={(t as any).key} style={{ borderBottom: '1px solid #f0f0f0' }}>
+              <td style={{ padding: 8 }}>{(t as any).key}</td>
+              <td style={{ padding: 8 }}>{(t as any).category || '-'}</td>
+              <td style={{ padding: 8 }}>
+                <TextField size="small" fullWidth value={(t as any).no || ''} onChange={(e)=>{
+                  setTranslations((prev: any) => ({
+                    ...prev,
+                    [(t as any).key]: { ...prev[(t as any).key], no: e.target.value }
+                  }));
+                }} />
+              </td>
+              <td style={{ padding: 8 }}>
+                <TextField size="small" fullWidth value={(t as any).en || ''} onChange={(e)=>{
+                  setTranslations((prev: any) => ({
+                    ...prev,
+                    [(t as any).key]: { ...prev[(t as any).key], en: e.target.value }
+                  }));
+                }} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Box>
+  );
+}
+
+export default function AdminCmsTranslations() {
+  return (
+    <AdminProvider>
+      <AdminLayout>
+        <CmsTranslationsContent />
+      </AdminLayout>
+    </AdminProvider>
   );
 }

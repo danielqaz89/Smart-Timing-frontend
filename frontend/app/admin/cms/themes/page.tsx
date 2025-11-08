@@ -1,81 +1,74 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Box, Typography, Paper, Button, TextField, Alert } from '@mui/material';
-import { Save as SaveIcon } from '@mui/icons-material';
+import React, { useState } from 'react';
+import { Box, Typography, TextField, Button } from '@mui/material';
+import { useSnackbar } from 'notistack';
+import { AdminProvider, useAdmin } from '../../../../contexts/AdminContext';
 import AdminLayout from '../../../../components/AdminLayout';
+import { useTranslations } from '../../../../contexts/TranslationsContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000';
 
-export default function CmsThemesPage() {
-  const [content, setContent] = useState('');
-  const [loading, setLoading] = useState(false);
+function CmsThemesContent() {
+  const { fetchWithAuth } = useAdmin();
+  const { enqueueSnackbar } = useSnackbar();
+  const { t } = useTranslations();
+  const [themeId, setThemeId] = useState('global');
+  const [theme, setTheme] = useState<any | null>(null);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    fetchTheme();
-  }, []);
-
-  async function fetchTheme() {
-    setLoading(true);
+  const load = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/admin/cms/themes/global`);
-      if (!res.ok) throw new Error('Failed to fetch');
+      const res = await fetchWithAuth(`${API_BASE}/api/admin/cms/themes/${encodeURIComponent(themeId)}`);
       const data = await res.json();
-      setContent(JSON.stringify(data, null, 2));
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      setTheme(data);
+    } catch (e: any) { enqueueSnackbar(e.message || 'Failed to load', { variant: 'error' }); }
+  };
 
-  async function handleSave() {
-    setLoading(true);
-    setError('');
-    setSuccess('');
+  const save = async () => {
+    if (!theme) return;
     try {
-      const token = localStorage.getItem('admin_token');
-      const parsed = JSON.parse(content);
-      const res = await fetch(`${API_BASE}/api/admin/cms/themes/global`, {
+      const colors = typeof theme.colors === 'string' ? JSON.parse(theme.colors) : theme.colors;
+      const typography = typeof theme.typography === 'string' ? JSON.parse(theme.typography) : theme.typography;
+      const spacing = typeof theme.spacing === 'string' ? JSON.parse(theme.spacing) : theme.spacing;
+      const res = await fetchWithAuth(`${API_BASE}/api/admin/cms/themes/${encodeURIComponent(themeId)}`, {
         method: 'PUT',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(parsed),
+        body: JSON.stringify({ theme_name: theme.theme_name, colors, typography, spacing }),
       });
-      if (!res.ok) throw new Error('Failed to save');
-      setSuccess('Theme saved!');
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+      enqueueSnackbar('Theme saved', { variant: 'success' });
+    } catch (e: any) { enqueueSnackbar(e.message || 'Failed to save', { variant: 'error' }); }
+  };
 
   return (
-    <AdminLayout>
-      <Box>
-        <Typography variant="h4" gutterBottom>Global Theme</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Edit colors, typography, spacing for the global theme.
-        </Typography>
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-        {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
-        <Button variant="contained" startIcon={<SaveIcon />} onClick={handleSave} disabled={loading} sx={{ mb: 2 }}>
-          Save
-        </Button>
-        <Paper sx={{ p: 2 }}>
-          <TextField
-            fullWidth
-            multiline
-            rows={30}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            disabled={loading}
-            InputProps={{ sx: { fontFamily: 'monospace', fontSize: 13 } }}
-          />
-        </Paper>
+    <Box>
+      <Typography variant="h4" gutterBottom>{t('admin.cms.themes.title', 'CMS Themes')}</Typography>
+
+      <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+        <TextField label={t('fields.theme_id', 'Theme ID')} value={themeId} onChange={(e)=>setThemeId(e.target.value)} size="small" />
+        <Button variant="outlined" onClick={load}>{t('common.load', 'Load')}</Button>
+        <Button variant="contained" onClick={save} disabled={!theme}>{t('common.save', 'Save')}</Button>
       </Box>
-    </AdminLayout>
+
+      {theme && (
+        <Box sx={{ display: 'grid', gap: 2 }}>
+          <TextField label={t('fields.theme_name', 'Theme Name')} size="small" value={theme.theme_name || ''} onChange={(e)=>setTheme({ ...theme, theme_name: e.target.value })} />
+          <TextField label={t('fields.colors_json', 'Colors (JSON)')} value={typeof theme.colors === 'string' ? theme.colors : JSON.stringify(theme.colors || {}, null, 2)} onChange={(e)=>setTheme({ ...theme, colors: e.target.value })} multiline minRows={6} />
+          <TextField label={t('fields.typography_json', 'Typography (JSON)')} value={typeof theme.typography === 'string' ? theme.typography : JSON.stringify(theme.typography || {}, null, 2)} onChange={(e)=>setTheme({ ...theme, typography: e.target.value })} multiline minRows={6} />
+          <TextField label={t('fields.spacing_json', 'Spacing (JSON)')} value={typeof theme.spacing === 'string' ? theme.spacing : JSON.stringify(theme.spacing || {}, null, 2)} onChange={(e)=>setTheme({ ...theme, spacing: e.target.value })} multiline minRows={6} />
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+export default function AdminCmsThemes() {
+  return (
+    <AdminProvider>
+      <AdminLayout>
+        <CmsThemesContent />
+      </AdminLayout>
+    </AdminProvider>
   );
 }

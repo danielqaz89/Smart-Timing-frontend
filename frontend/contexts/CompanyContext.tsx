@@ -1,86 +1,159 @@
-"use client";
+'use client';
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000';
 
-type CompanyUser = { id: number; email: string; role: "admin" | "member" | "case_manager" };
+interface CompanyUser {
+  id: number;
+  email: string;
+  role: 'admin' | 'case_manager' | 'member';
+  approved: boolean;
+}
 
-type CompanyContextType = {
-  token: string | null;
-  company: { id: number; name: string; logo_base64?: string | null } | null;
+interface Company {
+  id: number;
+  name: string;
+  logo_base64?: string;
+}
+
+interface CompanyContextType {
+  company: Company | null;
   user: CompanyUser | null;
-  loading: boolean;
-  login: () => void;
+  token: string | null;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response>;
-};
+  hasRole: (...roles: Array<'admin' | 'case_manager' | 'member'>) => boolean;
+}
 
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
-export function CompanyProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
-  const [company, setCompany] = useState<any>(null);
+export function CompanyProvider({ children }: { children: ReactNode }) {
+  const [company, setCompany] = useState<Company | null>(null);
   const [user, setUser] = useState<CompanyUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
-    // pick up token from URL
-    const params = new URLSearchParams(window.location.search);
-    const ok = params.get("company_auth");
-    const t = params.get("token");
-    if (ok === "success" && t) {
-      localStorage.setItem("company_token", t);
-      window.history.replaceState({}, "", window.location.pathname);
+    // Load token from localStorage on mount
+    const storedToken = localStorage.getItem('company_token');
+    if (storedToken) {
+      setToken(storedToken);
+      fetchUserInfo(storedToken);
+    } else {
+      setIsLoading(false);
     }
-    const stored = localStorage.getItem("company_token");
-    if (stored) setToken(stored);
-    setLoading(false);
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      if (!token) return;
-      try {
-        const res = await fetch(`${API_BASE}/api/company/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setCompany(data.company);
-          setUser({ id: data.user.id, email: data.user.email, role: data.user.role });
-        }
-      } catch {}
-    })();
-  }, [token]);
+  const fetchUserInfo = async (authToken: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/company/me`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
 
-  const login = () => {
-    window.location.href = `${API_BASE}/api/company/auth/google`;
+      if (!response.ok) {
+        throw new Error('Failed to fetch user info');
+      }
+
+      const data = await response.json();
+      setCompany(data.company);
+      setUser(data.user);
+    } catch (error) {
+      console.error('Failed to fetch user info:', error);
+      // Clear invalid token
+      localStorage.removeItem('company_token');
+      setToken(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const login = async (email: string, password: string) => {
+    const response = await fetch(`${API_BASE}/api/company/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Login failed');
+    }
+
+    const data = await response.json();
+    const newToken = data.token;
+
+    localStorage.setItem('company_token', newToken);
+    setToken(newToken);
+    
+    await fetchUserInfo(newToken);
+    router.push('/portal/dashboard');
   };
 
   const logout = () => {
-    localStorage.removeItem("company_token");
+    localStorage.removeItem('company_token');
     setToken(null);
     setCompany(null);
     setUser(null);
+    router.push('/portal/login');
   };
 
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
-    return fetch(url, {
+    if (!token) {
+      throw new Error('No authentication token');
+    }
+
+    const response = await fetch(url, {
       ...options,
-      headers: { ...(options.headers || {}), Authorization: `Bearer ${token}` },
+      headers: {
+        ...options.headers,
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
     });
+
+    // Auto-logout on 401
+    if (response.status === 401) {
+      logout();
+      throw new Error('Session expired');
+    }
+
+    return response;
+  };
+
+  const hasRole = (...roles: Array<'admin' | 'case_manager' | 'member'>) => {
+    if (!user) return false;
+    return roles.includes(user.role);
   };
 
   return (
-    <CompanyContext.Provider value={{ token, company, user, loading, login, logout, fetchWithAuth }}>
+    <CompanyContext.Provider
+      value={{
+        company,
+        user,
+        token,
+        isLoading,
+        login,
+        logout,
+        fetchWithAuth,
+        hasRole,
+      }}
+    >
       {children}
     </CompanyContext.Provider>
   );
 }
 
 export function useCompany() {
-  const ctx = useContext(CompanyContext);
-  if (!ctx) throw new Error("useCompany must be used within CompanyProvider");
-  return ctx;
+  const context = useContext(CompanyContext);
+  if (context === undefined) {
+    throw new Error('useCompany must be used within a CompanyProvider');
+  }
+  return context;
 }

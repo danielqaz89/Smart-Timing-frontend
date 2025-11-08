@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { ReactNode } from 'react';
 import {
   Box,
   Drawer,
@@ -10,7 +9,6 @@ import {
   List,
   Typography,
   Divider,
-  IconButton,
   ListItem,
   ListItemButton,
   ListItemIcon,
@@ -18,105 +16,117 @@ import {
   Avatar,
   Menu,
   MenuItem,
+  IconButton,
   Chip,
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon,
   People as PeopleIcon,
-  MailOutline as InviteIcon,
-  Folder as CasesIcon,
-  Description as TemplateIcon,
-  Assessment as ReportIcon,
+  PersonAdd as PersonAddIcon,
+  Folder as FolderIcon,
+  Description as DescriptionIcon,
+  Assessment as AssessmentIcon,
   Settings as SettingsIcon,
-  ExitToApp as LogoutIcon,
-  Business as BusinessIcon,
+  AccountCircle,
+  Logout as LogoutIcon,
+  Translate as TranslateIcon,
+  RocketLaunch as RocketLaunchIcon,
 } from '@mui/icons-material';
 import { useCompany } from '../contexts/CompanyContext';
+import { useRouter, usePathname } from 'next/navigation';
+import { useState } from 'react';
+import { useLanguage } from '../contexts/LanguageContext';
+import { useTranslations } from '../contexts/TranslationsContext';
 
-const DRAWER_WIDTH = 240;
+const drawerWidth = 260;
 
-const menuItems = [
-  { label: 'Dashboard', path: '/portal', icon: <DashboardIcon /> },
-  { label: 'Invites', path: '/portal/invites', icon: <InviteIcon />, adminOnly: true },
-  { label: 'Users', path: '/portal/users', icon: <PeopleIcon />, adminOnly: true },
-  { label: 'Cases', path: '/portal/cases', icon: <CasesIcon />, adminOnly: true },
-  { label: 'Templates', path: '/portal/templates', icon: <TemplateIcon />, adminOnly: true },
-  { label: 'Reports', path: '/portal/reports', icon: <ReportIcon /> },
-  { label: 'Settings', path: '/portal/settings', icon: <SettingsIcon />, adminOnly: true },
+interface NavigationItem {
+  key: string;
+  label: string;
+  path: string;
+  icon: ReactNode;
+  roles: Array<'admin' | 'case_manager' | 'member'>;
+}
+
+const navigationItems: NavigationItem[] = [
+  { key: 'portal.dashboard', label: 'Dashboard', path: '/portal/dashboard', icon: <DashboardIcon />, roles: ['admin', 'case_manager', 'member'] },
+  { key: 'portal.onboarding', label: 'Onboarding', path: '/portal/onboarding', icon: <RocketLaunchIcon />, roles: ['admin'] },
+  { key: 'portal.invites', label: 'Invitasjoner', path: '/portal/invites', icon: <PersonAddIcon />, roles: ['admin'] },
+  { key: 'portal.users', label: 'Brukere', path: '/portal/users', icon: <PeopleIcon />, roles: ['admin', 'case_manager'] },
+  { key: 'portal.cases', label: 'Saker', path: '/portal/cases', icon: <FolderIcon />, roles: ['admin', 'case_manager'] },
+  { key: 'portal.templates', label: 'Maler', path: '/portal/templates', icon: <DescriptionIcon />, roles: ['admin'] },
+  { key: 'portal.reports', label: 'Rapporter', path: '/portal/reports', icon: <AssessmentIcon />, roles: ['admin', 'case_manager'] },
+  { key: 'portal.settings', label: 'Innstillinger', path: '/portal/settings', icon: <SettingsIcon />, roles: ['admin'] },
 ];
 
-export default function PortalLayout({ children }: { children: React.ReactNode }) {
-  const { token, company, user, loading, login, logout } = useCompany();
+export default function PortalLayout({ children }: { children: ReactNode }) {
+  const { company, user, logout, hasRole } = useCompany();
   const router = useRouter();
   const pathname = usePathname();
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const { language, setLanguage } = useLanguage();
+  const { t } = useTranslations();
 
-  useEffect(() => {
-    if (!loading && !token) {
-      // Not logged in, show login prompt
-    }
-  }, [token, loading]);
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <Typography>Loading...</Typography>
-      </Box>
-    );
-  }
-
-  if (!token) {
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', gap: 2 }}>
-        <BusinessIcon sx={{ fontSize: 80, color: 'primary.main' }} />
-        <Typography variant="h4">Company Portal</Typography>
-        <Typography variant="body1" color="text.secondary">Sign in with your company Google account</Typography>
-        <button onClick={login} style={{ padding: '12px 24px', fontSize: 16, cursor: 'pointer' }}>
-          Sign in with Google
-        </button>
-      </Box>
-    );
-  }
-
-  const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
   };
 
-  const handleProfileMenuClose = () => {
+  const handleMenuClose = () => {
     setAnchorEl(null);
   };
 
   const handleLogout = () => {
-    handleProfileMenuClose();
+    handleMenuClose();
     logout();
-    router.push('/portal');
   };
 
-  const isAdmin = user?.role === 'admin';
-  const filteredMenuItems = menuItems.filter(item => !item.adminOnly || isAdmin);
+  const filteredNav = navigationItems.filter(item => 
+    item.roles.some(role => hasRole(role))
+  );
+
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'admin': return t('roles.admin', 'Administrator');
+      case 'case_manager': return t('roles.case_manager', 'Saksbehandler');
+      case 'member': return t('roles.member', 'Medlem');
+      default: return role;
+    }
+  };
+
+  const getRoleColor = (role: string): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
+    switch (role) {
+      case 'admin': return 'error';
+      case 'case_manager': return 'primary';
+      default: return 'default';
+    }
+  };
 
   return (
     <Box sx={{ display: 'flex' }}>
-      {/* App Bar */}
-      <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+      <AppBar
+        position="fixed"
+        sx={{
+          width: `calc(100% - ${drawerWidth}px)`,
+          ml: `${drawerWidth}px`,
+          bgcolor: 'background.paper',
+          color: 'text.primary',
+        }}
+        elevation={1}
+      >
         <Toolbar>
-          <BusinessIcon sx={{ mr: 2 }} />
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            {company?.name || 'Company Portal'}
+            {company?.name || t('portal.title', 'Bedriftsportal')}
           </Typography>
-
+          
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-              <Typography variant="body2">
-                {user?.email}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {user?.role}
-              </Typography>
-            </Box>
-            <IconButton onClick={handleProfileMenuOpen} size="small">
-              <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
-                {user?.email?.[0]?.toUpperCase() || 'U'}
+            <Chip 
+              label={getRoleLabel(user?.role || '')} 
+              size="small" 
+              color={getRoleColor(user?.role || '')}
+            />
+            <IconButton onClick={handleMenuOpen} size="small">
+              <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
+                {user?.email.charAt(0).toUpperCase()}
               </Avatar>
             </IconButton>
           </Box>
@@ -124,56 +134,81 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           <Menu
             anchorEl={anchorEl}
             open={Boolean(anchorEl)}
-            onClose={handleProfileMenuClose}
+            onClose={handleMenuClose}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
           >
             <MenuItem disabled>
-              <Box>
-                <Typography variant="body2">{user?.email}</Typography>
-                <Chip label={user?.role} size="small" sx={{ mt: 0.5 }} />
-              </Box>
+              <Typography variant="body2" color="text.secondary">
+                {user?.email}
+              </Typography>
             </MenuItem>
             <Divider />
+            <MenuItem onClick={() => { setLanguage(language === 'no' ? 'en' : 'no'); handleMenuClose(); }}>
+              <ListItemIcon>
+                <TranslateIcon fontSize="small" />
+              </ListItemIcon>
+              {language === 'no' ? t('common.switch_to_english', 'Switch to English') : t('common.switch_to_norwegian', 'Bytt til Norsk')}
+            </MenuItem>
             <MenuItem onClick={handleLogout}>
-              <LogoutIcon sx={{ mr: 1 }} fontSize="small" />
-              Logout
+              <ListItemIcon>
+                <LogoutIcon fontSize="small" />
+              </ListItemIcon>
+              {t('common.logout', 'Logg ut')}
             </MenuItem>
           </Menu>
         </Toolbar>
       </AppBar>
 
-      {/* Sidebar */}
       <Drawer
-        variant="permanent"
         sx={{
-          width: DRAWER_WIDTH,
+          width: drawerWidth,
           flexShrink: 0,
           '& .MuiDrawer-paper': {
-            width: DRAWER_WIDTH,
+            width: drawerWidth,
             boxSizing: 'border-box',
           },
         }}
+        variant="permanent"
+        anchor="left"
       >
-        <Toolbar />
-        <Box sx={{ overflow: 'auto' }}>
-          <List>
-            {filteredMenuItems.map((item) => (
-              <ListItem key={item.path} disablePadding>
-                <ListItemButton
-                  selected={pathname === item.path}
-                  onClick={() => router.push(item.path)}
-                >
-                  <ListItemIcon>{item.icon}</ListItemIcon>
-                  <ListItemText primary={item.label} />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-        </Box>
+        <Toolbar sx={{ justifyContent: 'center', py: 2 }}>
+          {company?.logo_base64 ? (
+            <img 
+              src={company.logo_base64} 
+              alt={company.name} 
+              style={{ maxWidth: '80%', maxHeight: '60px', objectFit: 'contain' }} 
+            />
+          ) : (
+            <img src="/icons/logo.svg" alt="Smart Timing" style={{ maxHeight: 48 }} />
+          )}
+        </Toolbar>
+        <Divider />
+        <List>
+          {filteredNav.map((item) => (
+            <ListItem key={item.path} disablePadding>
+              <ListItemButton
+                selected={pathname === item.path}
+                onClick={() => router.push(item.path)}
+              >
+                <ListItemIcon>{item.icon}</ListItemIcon>
+                <ListItemText primary={t(item.key, item.label)} />
+              </ListItemButton>
+            </ListItem>
+          ))}
+        </List>
       </Drawer>
 
-      {/* Main Content */}
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
-        <Toolbar />
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          bgcolor: 'background.default',
+          p: 3,
+          mt: 8,
+          minHeight: '100vh',
+        }}
+      >
         {children}
       </Box>
     </Box>

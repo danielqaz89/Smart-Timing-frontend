@@ -1,8 +1,8 @@
 "use client";
-import { useEffect, useMemo, useState, forwardRef, useRef } from "react";
+import { useEffect, useMemo, useState, useRef, forwardRef, useDeferredValue } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import useSWRInfinite from "swr/infinite";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { TableVirtuoso } from 'react-virtuoso';
 import { useUserSettings, useQuickTemplates, useProjectInfo } from "../lib/hooks";
 import {
   Box,
@@ -30,23 +30,9 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions,
-  Checkbox,
-  FormGroup,
-  FormControlLabel,
-  Skeleton,
-  Menu,
-  MenuItem as MuiMenuItem,
-  useMediaQuery,
-  useTheme,
-  Alert,
-  AlertTitle,
-  List,
-  ListItem,
-  ListItemIcon,
+  Switch,
 } from "@mui/material";
 import { useSnackbar } from "notistack";
-const ActionsMenuItem = MuiMenuItem;
 import SettingsDrawer from "../components/SettingsDrawer";
 import MigrationBanner from "../components/MigrationBanner";
 import MobileBottomNav from "../components/MobileBottomNav";
@@ -58,19 +44,17 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import SaveIcon from "@mui/icons-material/Save";
 import CloseIcon from "@mui/icons-material/Close";
-import ArchiveIcon from "@mui/icons-material/Archive";
-import UnarchiveIcon from "@mui/icons-material/Unarchive";
-import Inventory2Icon from "@mui/icons-material/Inventory2";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import BarChartIcon from "@mui/icons-material/BarChart";
+import RestoreIcon from "@mui/icons-material/Restore";
 import dayjs from "dayjs";
-import { API_BASE, createLog, deleteLog, fetchLogs, createLogsBulk, webhookTestRelay, deleteLogsMonth, deleteLogsAll, updateLog, sendTimesheet, sendTimesheetViaGmail, getGoogleAuthStatus, initiateGoogleAuth, generateMonthlyReport, archiveLog, unarchiveLog, archiveLogsByMonth, syncToGoogleSheets, exportUserData, deleteUserAccount, type LogRow } from "../lib/api";
+import { API_BASE, createLog, deleteLog, fetchLogs, createLogsBulk, webhookTestRelay, deleteLogsMonth, deleteLogsAll, updateLog, sendTimesheet, sendTimesheetViaGmail, getGoogleAuthStatus, generateMonthlyReport, type LogRow, archiveLog, unarchiveLog, archiveMonth } from "../lib/api";
 import { exportToPDF } from "../lib/pdfExport";
 import { useThemeMode } from "../components/ThemeRegistry";
 import Brightness4Icon from "@mui/icons-material/Brightness4";
 import Brightness7Icon from "@mui/icons-material/Brightness7";
 import QuickStampFAB from "../components/QuickStampFAB";
-import TemplateManager from "../components/TemplateManager";
+import dynamic from 'next/dynamic';
+const TemplateManager = dynamic(() => import('../components/TemplateManager'), { ssr: false });
+import { useTranslations } from "../contexts/TranslationsContext";
 
 // Locale-safe helpers for Timesats input (Norwegian)
 const nbFormatter = new Intl.NumberFormat('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -92,6 +76,13 @@ function parseRate(text: string) {
 function formatRate(n: number) {
   try { return nbFormatter.format(n || 0); } catch { return String(n || 0); }
 }
+// Safe number helpers to avoid NaN propagating into UI
+const safeNumber = (v: any, fallback = 0) => {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+const nokFmt = new Intl.NumberFormat('no-NO', { style: 'currency', currency: 'NOK', maximumFractionDigits: 0 });
+const formatCurrency = (v: number) => nokFmt.format(safeNumber(v, 0));
 
 // Helper to format YYYYMM as "Month YYYY" in Norwegian
 function formatMonthLabel(yyyymm: string): string {
@@ -146,6 +137,7 @@ function parseCsv(text: string) {
 }
 
 function CsvImport({ onImported, onToast }: { onImported: () => Promise<void> | void, onToast: (msg: string, sev?: any) => void }) {
+  const { t } = useTranslations();
   const [file, setFile] = useState<File | null>(null);
   const [ignoreWeekend, setIgnoreWeekend] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -185,13 +177,13 @@ function CsvImport({ onImported, onToast }: { onImported: () => Promise<void> | 
         const d = dayjs(r.date).day();
         return d !== 0 && d !== 6; // exclude Sun(0) and Sat(6)
       });
-      if (rows.length === 0) { onToast("Ingen rader å importere", "warning"); return; }
+      if (rows.length === 0) { onToast(t('import.none', 'Ingen rader å importere'), "warning"); return; }
       await createLogsBulk(rows);
       await onImported();
-      onToast(`Import fullført: ${rows.length} rader`, "success");
+      onToast(`${t('import.done', 'Import fullført')}: ${rows.length} ${t('import.rows', 'rader')}`, "success");
       setFile(null);
     } catch (e:any) {
-      onToast(`Import feilet: ${e?.message || e}`, "error");
+      onToast(`${t('import.failed', 'Import feilet')}: ${e?.message || e}`, "error");
     } finally {
       setBusy(false);
     }
@@ -199,29 +191,29 @@ function CsvImport({ onImported, onToast }: { onImported: () => Promise<void> | 
 
   return (
     <Stack spacing={2}>
-      <Typography variant="body2">Format: Dato, Inn, Ut, Pause, Aktivitet, Tittel, Prosjekt, Sted, Notater</Typography>
+      <Typography variant="body2">{t('import.format_hint', 'Format: Dato, Inn, Ut, Pause, Aktivitet, Tittel, Prosjekt, Sted, Notater')}</Typography>
       <Stack direction="row" spacing={2}>
         <Button variant="outlined" component="label">
-          Velg fil
+          {t('import.choose_file', 'Velg fil')}
           <input hidden type="file" accept=".csv,text/csv,.txt" onChange={(e) => setFile(e.target.files?.[0] || null)} />
         </Button>
-        <Typography sx={{ alignSelf: "center" }}>{file?.name ?? "Ingen fil valgt"}</Typography>
+        <Typography sx={{ alignSelf: "center" }}>{file?.name ?? t('import.no_file', 'Ingen fil valgt')}</Typography>
       </Stack>
       {file && (
         <>
           <Stack direction="row" spacing={2}>
-            <Chip label={`Totalt: ${totalCount}`} />
-            <Chip color={invalidCount ? "error" : "success"} label={`Ugyldige: ${invalidCount}`} />
+            <Chip label={`${t('import.total', 'Totalt')}: ${totalCount}`} />
+            <Chip color={invalidCount ? "error" : "success"} label={`${t('import.invalid', 'Ugyldige')}: ${invalidCount}`} />
           </Stack>
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Dato</TableCell>
-                <TableCell>Inn</TableCell>
-                <TableCell>Ut</TableCell>
-                <TableCell>Pause</TableCell>
-                <TableCell>Aktivitet</TableCell>
-                <TableCell>Tittel</TableCell>
+                <TableCell>{t('table.date', 'Dato')}</TableCell>
+                <TableCell>{t('table.in', 'Inn')}</TableCell>
+                <TableCell>{t('table.out', 'Ut')}</TableCell>
+                <TableCell>{t('table.break', 'Pause')}</TableCell>
+                <TableCell>{t('table.activity', 'Aktivitet')}</TableCell>
+                <TableCell>{t('table.title', 'Tittel')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -240,14 +232,15 @@ function CsvImport({ onImported, onToast }: { onImported: () => Promise<void> | 
         </>
       )}
       <Stack direction="row" spacing={2}>
-        <Chip label={ignoreWeekend ? "Ignorer helg: På" : "Ignorer helg: Av"} onClick={() => setIgnoreWeekend(!ignoreWeekend)} />
-        <Button disabled={!file || busy || invalidCount > 0} variant="contained" onClick={handleImport}>Importer</Button>
+        <Chip label={ignoreWeekend ? t('import.ignore_weekend_on', 'Ignorer helg: På') : t('import.ignore_weekend_off', 'Ignorer helg: Av')} onClick={() => setIgnoreWeekend(!ignoreWeekend)} />
+        <Button disabled={!file || busy || invalidCount > 0} variant="contained" onClick={handleImport}>{t('import.import', 'Importer')}</Button>
       </Stack>
     </Stack>
   );
 }
 
-function WebhookSection({ onImported, onToast, settings, updateSettings, monthNav }: { onImported: () => Promise<void> | void, onToast: (msg: string, sev?: any) => void, settings: any, updateSettings: any, monthNav: string }) {
+function WebhookSection({ onImported, onToast, settings, updateSettings }: { onImported: () => Promise<void> | void, onToast: (msg: string, sev?: any) => void, settings: any, updateSettings: any }) {
+  const { t } = useTranslations();
   const [busy, setBusy] = useState(false);
   const active = settings?.webhook_active || false;
   const webhookUrl = settings?.webhook_url || '';
@@ -291,41 +284,25 @@ function WebhookSection({ onImported, onToast, settings, updateSettings, monthNa
     }
   }
 
-  async function syncToSheets() {
-    if (!sheetUrl) return;
-    setBusy(true);
-    try {
-      const result = await syncToGoogleSheets({ month: monthNav });
-      onToast(`Synkronisert ${result.rowsAdded || 0} logger til Google Sheets`, "success");
-      await onImported();
-    } catch (e: any) {
-      onToast(`Synkronisering feilet: ${e?.message || e}`, "error");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <Stack spacing={2}>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-        <TextField label="Webhook URL" fullWidth value={webhookUrl} onChange={(e) => updateSettings({webhook_url: e.target.value})} />
-        <TextField label="Google Sheets URL (valgfritt)" fullWidth value={sheetUrl} onChange={(e) => updateSettings({sheet_url: e.target.value})} />
+        <TextField label={t('fields.webhook_url', 'Webhook URL')} fullWidth value={webhookUrl} onChange={(e) => updateSettings({webhook_url: e.target.value})} />
+        <TextField label={`${t('fields.google_sheets_url', 'Google Sheets URL')} (${t('placeholders.optional', 'valgfritt')})`} fullWidth value={sheetUrl} onChange={(e) => updateSettings({sheet_url: e.target.value})} />
       </Stack>
-      <Stack direction="row" spacing={2} flexWrap="wrap">
-        <Chip label={active ? "Aktiver synk: På" : "Aktiver synk: Av"} onClick={() => updateSettings({webhook_active: !active})} />
-        <Button disabled={!webhookUrl || busy} variant="outlined" onClick={async () => { await sendTest(); onToast("Webhook testrad sendt"); }}>Send testrad</Button>
-        <Button disabled={!sheetUrl || busy} variant="outlined" onClick={importFromSheet}>Importer FRA Sheets</Button>
-        <Button disabled={!sheetUrl || busy} variant="contained" color="primary" onClick={syncToSheets}>Synkroniser TIL Sheets</Button>
+      <Stack direction="row" spacing={2}>
+        <Chip label={active ? t('sync.enable_on', 'Aktiver synk: På') : t('sync.enable_off', 'Aktiver synk: Av')} onClick={() => updateSettings({webhook_active: !active})} />
+        <Button disabled={!webhookUrl || busy} variant="outlined" onClick={async () => { await sendTest(); onToast(t('webhook.test_sent', 'Webhook testrad sendt')); }}>{t('webhook.send_test', 'Send testrad')}</Button>
+        <Button disabled={!sheetUrl || busy} variant="outlined" onClick={importFromSheet}>{t('import.from_sheets', 'Importer fra Google Sheets')}</Button>
       </Stack>
-      <Typography variant="caption" color="text.secondary">
-        Import krever at arket er delt "Anyone with the link". Synkronisering krever Google OAuth tilkobling og fungerer kun for Kinoa Tiltak AS.
-      </Typography>
+      <Typography variant="caption" color="text.secondary">{t('import.sheet_note', 'Oppsett lagres i nettleseren. For import må arket være delt "Anyone with the link" eller publisert.')}</Typography>
     </Stack>
   );
 }
 
 
 function MonthBulk({ onDone, onToast }: { onDone: () => Promise<void> | void, onToast: (msg: string, sev?: any) => void }) {
+  const { t } = useTranslations();
   const [month, setMonth] = useState(dayjs().format("YYYY-MM"));
   const [start, setStart] = useState("09:00");
   const [end, setEnd] = useState("17:00");
@@ -362,9 +339,9 @@ function MonthBulk({ onDone, onToast }: { onDone: () => Promise<void> | void, on
     setBusy(true);
     try {
       const rows = generateRows();
-      if (rows.length === 0) { onToast("Ingen hverdager i valgt måned", "warning"); return; }
+      if (rows.length === 0) { onToast(t('bulk.no_weekdays', 'Ingen hverdager i valgt måned'), "warning"); return; }
       await createLogsBulk(rows);
-      onToast(`Lagt inn ${rows.length} hverdager`, "success");
+      onToast(`${t('bulk.inserted', 'Lagt inn')} ${rows.length} ${t('bulk.weekdays', 'hverdager')}`, "success");
       await onDone();
     } catch (e:any) {
       onToast(`Feil ved innlegging: ${e?.message || e}`, "error");
@@ -376,29 +353,30 @@ function MonthBulk({ onDone, onToast }: { onDone: () => Promise<void> | void, on
   return (
     <Stack spacing={2}>
       <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-        <TextField type="month" label="Måned" InputLabelProps={{ shrink: true }} value={month} onChange={(e) => setMonth(e.target.value)} />
-        <TextField type="time" label="Inn" InputLabelProps={{ shrink: true }} value={start} onChange={(e) => setStart(e.target.value)} />
-        <TextField type="time" label="Ut" InputLabelProps={{ shrink: true }} value={end} onChange={(e) => setEnd(e.target.value)} />
-        <TextField type="number" label="Pause (timer)" value={breakHours} onChange={(e) => setBreakHours(Number(e.target.value) || 0)} />
+        <TextField type="month" label={t('fields.month', 'Måned')} InputLabelProps={{ shrink: true }} value={month} onChange={(e) => setMonth(e.target.value)} />
+        <TextField type="time" label={t('fields.in', 'Inn')} InputLabelProps={{ shrink: true }} value={start} onChange={(e) => setStart(e.target.value)} />
+        <TextField type="time" label={t('fields.out', 'Ut')} InputLabelProps={{ shrink: true }} value={end} onChange={(e) => setEnd(e.target.value)} />
+        <TextField type="number" label={t('fields.break_hours', 'Pause (timer)')} value={breakHours} onChange={(e) => setBreakHours(Number(e.target.value) || 0)} />
         <FormControl>
-          <InputLabel>Aktivitet</InputLabel>
-          <Select label="Aktivitet" value={activity} onChange={(e) => setActivity(e.target.value as any)}>
-            <MenuItem value="Work">Arbeid</MenuItem>
-            <MenuItem value="Meeting">Møte</MenuItem>
+          <InputLabel>{t('fields.activity', 'Aktivitet')}</InputLabel>
+          <Select label={t('fields.activity', 'Aktivitet')} value={activity} onChange={(e) => setActivity(e.target.value as any)}>
+            <MenuItem value="Work">{t('stats.work', 'Arbeid')}</MenuItem>
+            <MenuItem value="Meeting">{t('stats.meetings', 'Møte')}</MenuItem>
           </Select>
         </FormControl>
       </Stack>
       <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-        <TextField label="Tittel / Møte" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
-        <TextField label="Prosjekt / Kunde" value={project} onChange={(e) => setProject(e.target.value)} fullWidth />
-        <TextField label="Sted / Modus" value={place} onChange={(e) => setPlace(e.target.value)} fullWidth />
+        <TextField label={t('fields.title_meeting', 'Tittel / Møte')} value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
+        <TextField label={t('fields.project_client', 'Prosjekt / Kunde')} value={project} onChange={(e) => setProject(e.target.value)} fullWidth />
+        <TextField label={t('fields.place_mode', 'Sted / Modus')} value={place} onChange={(e) => setPlace(e.target.value)} fullWidth />
       </Stack>
-      <Button variant="contained" onClick={handleInsert} disabled={busy}>Legg inn for hele måneden</Button>
+      <Button variant="contained" onClick={handleInsert} disabled={busy}>{t('bulk.insert_month', 'Legg inn for hele måneden')}</Button>
     </Stack>
   );
 }
 
 function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: string, sev?: any) => void }) {
+  const { t } = useTranslations();
   const [busy, setBusy] = useState(false);
   const [googleConnected, setGoogleConnected] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -406,14 +384,6 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
   const [showComposer, setShowComposer] = useState(false);
   const [customIntro, setCustomIntro] = useState('');
   const [customNotes, setCustomNotes] = useState('');
-  // Structured sections (Miljøarbeider)
-  const [bgTiltak, setBgTiltak] = useState('');
-  const [arbeidTiltak, setArbeidTiltak] = useState('');
-  const [utviklingEndring, setUtviklingEndring] = useState('');
-  const [utfordringer, setUtfordringer] = useState('');
-  const [interesserPavirkn, setInteresserPavirkn] = useState('');
-  const [fagligVurdering, setFagligVurdering] = useState('');
-  const [anbefalinger, setAnbefalinger] = useState('');
   const [detectedNames, setDetectedNames] = useState<string[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [previewChanges, setPreviewChanges] = useState<{ original: string; corrected: string; replacements: Array<{ from: string; to: string }> }>({ original: '', corrected: '', replacements: [] });
@@ -469,6 +439,10 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
     let correctedIntro = customIntro;
     let correctedNotes = customNotes;
     const replacements: Array<{ from: string; to: string }> = [];
+
+    function escapeRegExp(s: string) {
+      return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
     
     // Function to determine appropriate replacement based on context
     function getReplacementTerm(name: string, context: string): string {
@@ -503,7 +477,8 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
       
       // Default replacements based on name characteristics
       // Try to preserve capitalization of first letter if at sentence start
-      const isStartOfSentence = context.match(new RegExp(`[\.\?\!]\\s*${name}`));
+      const escapedName = escapeRegExp(name);
+      const isStartOfSentence = new RegExp(`[.?!]\\s*${escapedName}`).test(context);
       const defaultTerm = isFullName ? 'Brukeren' : 'personen';
       
       return isStartOfSentence ? defaultTerm.charAt(0).toUpperCase() + defaultTerm.slice(1) : defaultTerm;
@@ -511,18 +486,20 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
     
     // Replace names and track changes
     detectedNames.forEach(name => {
-      const introContextMatch = customIntro.match(new RegExp(`.{0,50}${name}.{0,50}`, 'i'));
+      const escapedName = escapeRegExp(name);
+      const introContextMatch = customIntro.match(new RegExp(`.{0,50}${escapedName}.{0,50}`, 'i'));
       const introContext = introContextMatch ? introContextMatch[0] : '';
       const introReplacement = getReplacementTerm(name, introContext);
       
       if (correctedIntro.includes(name)) {
         replacements.push({ from: name, to: introReplacement });
-        correctedIntro = correctedIntro.replace(new RegExp(name, 'g'), introReplacement);
+        correctedIntro = correctedIntro.replace(new RegExp(escapedName, 'g'), introReplacement);
       }
     });
     
     detectedNames.forEach(name => {
-      const notesContextMatch = customNotes.match(new RegExp(`.{0,50}${name}.{0,50}`, 'i'));
+      const escapedName = escapeRegExp(name);
+      const notesContextMatch = customNotes.match(new RegExp(`.{0,50}${escapedName}.{0,50}`, 'i'));
       const notesContext = notesContextMatch ? notesContextMatch[0] : '';
       const notesReplacement = getReplacementTerm(name, notesContext);
       
@@ -530,7 +507,7 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
         if (!replacements.find(r => r.from === name)) {
           replacements.push({ from: name, to: notesReplacement });
         }
-        correctedNotes = correctedNotes.replace(new RegExp(name, 'g'), notesReplacement);
+        correctedNotes = correctedNotes.replace(new RegExp(escapedName, 'g'), notesReplacement);
       }
     });
     
@@ -548,7 +525,7 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
     setCustomIntro(lines[0] || '');
     setCustomNotes(lines[1] || '');
     setShowPreview(false);
-    onToast('Navn erstattet med generelle betegnelser', 'success');
+    onToast(t('reports.names_replaced', 'Navn erstattet med generelle betegnelser'), 'success');
   }
 
   // Check Google auth status on mount
@@ -568,26 +545,11 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
   async function handleGenerateReport() {
     setBusy(true);
     try {
-      // Build combined notes (append structured sections)
-      const sections: string[] = [];
-      if ((template === 'miljøarbeider' || template === 'auto')) {
-        const s = [
-          { h: 'Arbeid og tiltak som er gjennomført', v: arbeidTiltak },
-          { h: 'Utvikling og endring siden oppstart', v: utviklingEndring },
-          { h: 'Nåværende utfordringer', v: utfordringer },
-          { h: 'Interesser og påvirkningsfaktorer', v: interesserPavirkn },
-          { h: 'Faglig vurdering', v: fagligVurdering },
-          { h: 'Anbefalinger videre', v: anbefalinger },
-        ];
-        s.forEach(({h,v}) => { if ((v||'').trim()) sections.push(`## ${h}\n${v.trim()}`); });
-      }
-      const combinedNotes = [customNotes.trim(), ...sections].filter(Boolean).join('\n\n') || undefined;
-
       const result = await generateMonthlyReport({
         month,
         template,
-        customIntro: customIntro.trim() || (bgTiltak.trim() || undefined),
-        customNotes: combinedNotes,
+        customIntro: customIntro.trim() || undefined,
+        customNotes: customNotes.trim() || undefined,
       });
       onToast(`Rapport opprettet! Åpnes i ny fane...`, 'success');
       // Open document in new tab
@@ -609,28 +571,9 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
 
   if (!googleConnected) {
     return (
-      <Stack spacing={2}>
-        <Typography variant="body2" color="text.secondary">
-          Koble til Google-kontoen din for å generere rapporter automatisk i Google Docs.
-        </Typography>
-        <Button 
-          variant="contained" 
-          color="primary"
-          onClick={async () => {
-            try {
-              const authUrl = await initiateGoogleAuth();
-              window.location.href = authUrl;
-            } catch (e: any) {
-              onToast(`Kunne ikke starte Google-pålogging: ${e?.message || e}`, 'error');
-            }
-          }}
-        >
-          🔗 Koble til Google-konto
-        </Button>
-        <Typography variant="caption" color="text.secondary">
-          Sikker pålogging via Google OAuth. Vi får tilgang til å lage dokumenter og sende e-post på dine vegne.
-        </Typography>
-      </Stack>
+      <Typography variant="body2" color="text.secondary">
+        {t('reports.connect_google', 'Koble til Google-kontoen din for å generere rapporter.')}
+      </Typography>
     );
   }
 
@@ -638,13 +581,13 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
     return (
       <Stack spacing={2}>
         <Typography variant="body2">
-          Generer en profesjonell månedsrapport i Google Docs med prosjektinfo, statistikk og detaljert logg.
+          {t('reports.description', 'Generer en profesjonell månedsrapport i Google Docs med prosjektinfo, statistikk og detaljert logg.')}
         </Typography>
         <Button 
           variant="contained" 
           onClick={() => setShowComposer(true)}
         >
-          Skriv rapport
+          {t('reports.write', 'Skriv rapport')}
         </Button>
       </Stack>
     );
@@ -653,46 +596,46 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
   return (
     <Stack spacing={3}>
       <Stack direction="row" spacing={2} alignItems="center">
-        <Typography variant="h6" sx={{ flex: 1 }}>Rapportsammenstilling</Typography>
-        <Button size="small" onClick={() => setShowComposer(false)}>Avbryt</Button>
+        <Typography variant="h6" sx={{ flex: 1 }}>{t('reports.composer_title', 'Rapportsammenstilling')}</Typography>
+        <Button size="small" onClick={() => setShowComposer(false)}>{t('common.cancel', 'Avbryt')}</Button>
       </Stack>
 
       {/* Template Selection */}
       <FormControl fullWidth>
-        <InputLabel>Rapportmal</InputLabel>
+        <InputLabel>{t('reports.template_label', 'Rapportmal')}</InputLabel>
         <Select
-          label="Rapportmal"
+          label={t('reports.template_label', 'Rapportmal')}
           value={template}
           onChange={(e) => setTemplate(e.target.value as any)}
         >
-          <MenuItem value="auto">Automatisk (basert på prosjekt)</MenuItem>
-          <MenuItem value="standard">Standard</MenuItem>
-          <MenuItem value="miljøarbeider">Miljøarbeider / Sosialarbeider</MenuItem>
+          <MenuItem value="auto">{t('reports.template_auto', 'Automatisk (basert på prosjekt)')}</MenuItem>
+          <MenuItem value="standard">{t('reports.template_standard', 'Standard')}</MenuItem>
+          <MenuItem value="miljøarbeider">{t('reports.template_social', 'Miljøarbeider / Sosialarbeider')}</MenuItem>
         </Select>
       </FormControl>
 
       <Typography variant="caption" color="text.secondary">
-        {template === 'auto' && 'Malen velges automatisk basert på din rolle i prosjektet.'}
-        {template === 'standard' && 'Standard rapport med fokus på arbeidstimer og møter.'}
-        {template === 'miljøarbeider' && 'Aktivitetsrapport med fokus på klientmøter og sosiale aktiviteter.'}
+        {template === 'auto' && t('reports.template_hint_auto', 'Malen velges automatisk basert på din rolle i prosjektet.')}
+        {template === 'standard' && t('reports.template_hint_standard', 'Standard rapport med fokus på arbeidstimer og møter.')}
+        {template === 'miljøarbeider' && t('reports.template_hint_social', 'Aktivitetsrapport med fokus på klientmøter og sosiale aktiviteter.')}
       </Typography>
       
       {/* Privacy Guidelines for Miljøarbeider */}
       {(template === 'miljøarbeider' || (template === 'auto' && true)) && (
         <Stack spacing={1} sx={{ p: 2, bgcolor: 'warning.light', borderRadius: 1, border: '1px solid', borderColor: 'warning.main' }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>⚠️ Personvernretningslinjer for miljøarbeider</Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>{t('reports.privacy_header', '⚠️ Personvernretningslinjer for miljøarbeider')}</Typography>
           <Typography variant="body2" component="div">
-            <strong>Viktig:</strong> Rapporter skal ikke inneholde personopplysninger.
+            <strong>{t('reports.important', 'Viktig')}:</strong> {t('reports.no_personal_data', 'Rapporter skal ikke inneholde personopplysninger.')}
           </Typography>
           <Typography variant="body2" component="div">
-            • <strong>Ikke bruk navn</strong> på klienter<br/>
-            • Bruk heller generelle betegnelser: "Gutten", "Jenta", "Brukeren", "Deltakeren"<br/>
-            • Unngå detaljer som kan identifisere personer (alder, adresse, spesifikke situasjoner)<br/>
-            • Fokuser på aktiviteter og utvikling, ikke identitet<br/>
-            • Vurder anonymisering av steder hvis nødvendig
+            • {t('reports.no_names', 'Ikke bruk navn på klienter')}<br/>
+            • {t('reports.use_generic_terms', 'Bruk heller generelle betegnelser: "Gutten", "Jenta", "Brukeren", "Deltakeren"')}<br/>
+            • {t('reports.avoid_identifying_details', 'Unngå detaljer som kan identifisere personer (alder, adresse, spesifikke situasjoner)')}<br/>
+            • {t('reports.focus_on_activities_development', 'Fokuser på aktiviteter og utvikling, ikke identitet')}<br/>
+            • {t('reports.consider_anonymizing_places', 'Vurder anonymisering av steder hvis nødvendig')}
           </Typography>
           <Typography variant="caption" sx={{ fontStyle: 'italic', mt: 1 }}>
-            Disse retningslinjene sikrer GDPR-etterlevelse og beskytter klientenes personvern.
+            {t('reports.gdpr_footer', 'Disse retningslinjene sikrer GDPR-etterlevelse og beskytter klientenes personvern.')}
           </Typography>
         </Stack>
       )}
@@ -712,10 +655,10 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
           animation: 'pulse 2s ease-in-out infinite'
         }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'error.dark' }}>
-            🚨 ADVARSEL: Mulige navn oppdaget!
+            {t('reports.names_warning_title', '🚨 ADVARSEL: Mulige navn oppdaget!')}
           </Typography>
           <Typography variant="body2" sx={{ color: 'error.dark' }}>
-            Teksten din ser ut til å inneholde navn som kan identifisere personer:
+            {t('reports.names_warning_text', 'Teksten din ser ut til å inneholde navn som kan identifisere personer:')}
           </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ gap: 1 }}>
             {detectedNames.map((name, idx) => (
@@ -729,7 +672,7 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
             ))}
           </Stack>
           <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'error.dark' }}>
-            Skal vi automatisk erstatte disse navnene med generelle betegnelser?
+            {t('reports.names_auto_replace_question', 'Skal vi automatisk erstatte disse navnene med generelle betegnelser?')}
           </Typography>
           <Stack direction="row" spacing={2}>
             <Button 
@@ -738,11 +681,11 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
               size="small"
               onClick={showCorrectionPreview}
               sx={{ fontWeight: 'bold' }}
-            >
-              ✅ Fiks automatisk
+>
+              {t('reports.fix_auto_button', '✅ Fiks automatisk')}
             </Button>
             <Typography variant="caption" sx={{ alignSelf: 'center', color: 'error.dark', fontStyle: 'italic' }}>
-              Eksempel: "{detectedNames[0]}" → "Gutten" / "Jenta" / "Brukeren"
+              {t('reports.example_replacement', 'Eksempel')}: "{detectedNames[0]}" → "{t('reports.example_boy', 'Gutten')}" / "{t('reports.example_girl', 'Jenta')}" / "{t('reports.example_user', 'Brukeren')}"
             </Typography>
           </Stack>
         </Stack>
@@ -750,48 +693,16 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
 
       <Divider />
 
-      {/* Privacy Guidelines (Miljøarbeider) */}
-      {(template === 'miljøarbeider' || template === 'auto') && (
-        <Alert severity="warning" sx={{ borderRadius: 2 }}>
-          <AlertTitle>⚠️ Personvernretningslinjer for miljøarbeider</AlertTitle>
-          <Stack spacing={0.5} component="div">
-            <Typography variant="body2"><strong>Viktig:</strong> Rapporter skal ikke inneholde personopplysninger.</Typography>
-            <Typography variant="body2">• Ikke bruk navn på klienter</Typography>
-            <Typography variant="body2">• Bruk generelle betegnelser: «Gutten», «Jenta», «Brukeren», «Deltakeren»</Typography>
-            <Typography variant="body2">• Unngå detaljer som kan identifisere personer (alder, adresse, spesifikke situasjoner)</Typography>
-            <Typography variant="body2">• Fokuser på aktiviteter og utvikling, ikke identitet</Typography>
-            <Typography variant="body2">• Vurder anonymisering av steder ved behov</Typography>
-            <Typography variant="caption" color="text.secondary">
-              Disse retningslinjene sikrer GDPR‑etterlevelse og beskytter klientenes personvern.
-            </Typography>
-          </Stack>
-        </Alert>
-      )}
-
-      {/* Report Contents Info */}
-      <Stack spacing={1} sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
-        <Typography variant="subtitle2">Rapporten vil inneholde:</Typography>
-        <Typography variant="body2" component="div">
-          • Tittel og måned ({month.slice(0,4)}-{month.slice(4,6)})<br/>
-          • Prosjektinformasjon<br/>
-          • Sammendrag (timer, dager, aktiviteter)<br/>
-          • Detaljert logg med alle registreringer
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Rapporten skal inneholde følgende: Klient informasjon, Oppdragsgiver, Tidsperiode, Miljøarbeider.
-        </Typography>
-      </Stack>
-
       {/* Custom Introduction */}
       <Stack spacing={1}>
-        <Typography variant="subtitle2">Bakgrunn for tiltaket</Typography>
+        <Typography variant="subtitle2">{t('reports.intro_optional', 'Innledning (valgfritt)')}</Typography>
         <TextField
           multiline
           rows={4}
           placeholder={
             template === 'miljøarbeider' ?
-            "Beskriv bakgrunnen for tiltaket og målsettingen.\n\nHusk: Unngå navn og identifiserbar informasjon." :
-            "Beskriv bakgrunnen for tiltaket..."
+            t('reports.intro_placeholder_social', "Skriv en innledning til rapporten...\n\nEksempel: I løpet av denne perioden har jeg jobbet med flere brukere gjennom ulike aktiviteter. Fokuset har vært på sosial utvikling og hverdagsmestring.\n\nHusk: Unngå navn og identifiserbar informasjon.") :
+            t('reports.intro_placeholder_standard', "Skriv en innledning til rapporten... \n\nEksempel: Dette er en oppsummering av mine aktiviteter i løpet av måneden. Jeg har fokusert på...")
           }
           value={customIntro}
           onChange={(e) => setCustomIntro(e.target.value)}
@@ -802,34 +713,34 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
           }}
         />
         <Typography variant="caption" color="text.secondary">
-          Innledningen vises øverst i rapporten, før prosjektinformasjonen.
-          {template === 'miljøarbeider' && ' Husk å anonymisere all informasjon.'}
+          {t('reports.intro_hint', 'Innledningen vises øverst i rapporten, før prosjektinformasjonen.')}
+          {template === 'miljøarbeider' && ` ${t('reports.intro_anonymize_hint', 'Husk å anonymisere all informasjon.')}`}
         </Typography>
       </Stack>
 
-
-      {/* Structured Sections for Miljøarbeider */}
-      {(template === 'miljøarbeider' || template === 'auto') && (
-        <Stack spacing={2}>
-          <TextField label="Arbeid og tiltak som er gjennomført" multiline rows={3} value={arbeidTiltak} onChange={(e)=>setArbeidTiltak(e.target.value)} fullWidth />
-          <TextField label="Utvikling og endring siden oppstart" multiline rows={3} value={utviklingEndring} onChange={(e)=>setUtviklingEndring(e.target.value)} fullWidth />
-          <TextField label="Nåværende utfordringer" multiline rows={3} value={utfordringer} onChange={(e)=>setUtfordringer(e.target.value)} fullWidth />
-          <TextField label="Interesser og påvirkningsfaktorer" multiline rows={3} value={interesserPavirkn} onChange={(e)=>setInteresserPavirkn(e.target.value)} fullWidth />
-          <TextField label="Faglig vurdering" multiline rows={3} value={fagligVurdering} onChange={(e)=>setFagligVurdering(e.target.value)} fullWidth />
-          <TextField label="Anbefalinger videre" multiline rows={3} value={anbefalinger} onChange={(e)=>setAnbefalinger(e.target.value)} fullWidth />
-        </Stack>
-      )}
+      {/* Preview Info */}
+      <Stack spacing={1} sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
+        <Typography variant="subtitle2">{t('reports.will_include', 'Rapporten vil inneholde:')}</Typography>
+        <Typography variant="body2" component="div">
+          • {t('reports.includes_title_month', 'Tittel og måned')} ({month.slice(0,4)}-{month.slice(4,6)})<br/>
+          {customIntro && `• ${t('reports.includes_custom_intro', 'Din egendefinerte innledning')}\n`}
+          • {t('reports.includes_project_info', 'Prosjektinformasjon')}<br/>
+          • {t('reports.includes_summary', 'Sammendrag (timer, dager, aktiviteter)')}<br/>
+          • {t('reports.includes_detailed_log', 'Detaljert logg med alle registreringer')}<br/>
+          {customNotes && `• ${t('reports.includes_custom_notes', 'Dine tilleggsnotater')}`}
+        </Typography>
+      </Stack>
 
       {/* Custom Notes */}
       <Stack spacing={1}>
-        <Typography variant="subtitle2">Tilleggsnotater (valgfritt)</Typography>
+        <Typography variant="subtitle2">{t('reports.notes_optional', 'Tilleggsnotater (valgfritt)')}</Typography>
         <TextField
           multiline
           rows={4}
           placeholder={
             template === 'miljøarbeider' ?
-            "Legg til notater på slutten av rapporten...\n\nEksempel: Generelle observasjoner om fremgang, utfordringer i arbeidet, behov for oppfølging, samarbeidspartnere involvert, etc.\n\nHusk: Ikke inkluder personidentifiserbar informasjon." :
-            "Legg til notater på slutten av rapporten...\n\nEksempel: Refleksjoner, utfordringer, planlagte tiltak for neste måned, etc."
+            t('reports.notes_placeholder_social', "Legg til notater på slutten av rapporten...\n\nEksempel: Generelle observasjoner om fremgang, utfordringer i arbeidet, behov for oppfølging, samarbeidspartnere involvert, etc.\n\nHusk: Ikke inkluder personidentifiserbar informasjon.") :
+            t('reports.notes_placeholder_standard', "Legg til notater på slutten av rapporten...\n\nEksempel: Refleksjoner, utfordringer, planlagte tiltak for neste måned, etc.")
           }
           value={customNotes}
           onChange={(e) => setCustomNotes(e.target.value)}
@@ -840,8 +751,8 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
           }}
         />
         <Typography variant="caption" color="text.secondary">
-          Notater vises nederst i rapporten, etter den detaljerte loggen.
-          {template === 'miljøarbeider' && ' Fokuser på generelle mønstre og utvikling, ikke individuelle detaljer.'}
+          {t('reports.notes_hint', 'Notater vises nederst i rapporten, etter den detaljerte loggen.')}
+          {template === 'miljøarbeider' && ` ${t('reports.notes_social_hint', 'Fokuser på generelle mønstre og utvikling, ikke individuelle detaljer.')}`}
         </Typography>
       </Stack>
 
@@ -854,32 +765,32 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
           startIcon={busy ? <CircularProgress size={16} /> : null}
           fullWidth
           color={detectedNames.length > 0 && (template === 'miljøarbeider' || template === 'auto') ? 'error' : 'primary'}
-        >
-          {busy ? 'Genererer...' : detectedNames.length > 0 && (template === 'miljøarbeider' || template === 'auto') ? 'Fjern navn før generering' : 'Generer Google Docs rapport'}
+>
+          {busy ? t('common.generating', 'Genererer...') : detectedNames.length > 0 && (template === 'miljøarbeider' || template === 'auto') ? t('reports.remove_names_first', 'Fjern navn før generering') : t('reports.generate_docs', 'Generer Google Docs rapport')}
         </Button>
       </Stack>
       
       {detectedNames.length > 0 && (template === 'miljøarbeider' || template === 'auto') && (
         <Typography variant="caption" color="error" sx={{ textAlign: 'center', fontWeight: 'bold' }}>
-          ⚠️ Kan ikke generere rapport med personidentifiserbar informasjon
+          {t('reports.cannot_generate_with_pii', '⚠️ Kan ikke generere rapport med personidentifiserbar informasjon')}
         </Typography>
       )}
 
       <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
-        Rapporten opprettes som et nytt Google Docs-dokument som du kan redigere videre.
+        {t('reports.docs_footer', 'Rapporten opprettes som et nytt Google Docs-dokument som du kan redigere videre.')}
       </Typography>
       
       {/* Preview Dialog */}
       <Dialog open={showPreview} onClose={() => setShowPreview(false)} maxWidth="md" fullWidth>
         <DialogTitle>
           <Stack direction="row" spacing={2} alignItems="center">
-            <Typography variant="h6">🔍 Forhåndsvisning av endringer</Typography>
+            <Typography variant="h6">{t('reports.preview_changes', '🔍 Forhåndsvisning av endringer')}</Typography>
           </Stack>
         </DialogTitle>
         <DialogContent>
           <Stack spacing={3}>
             <Typography variant="body2">
-              Følgende navn vil bli erstattet med generelle betegnelser:
+              {t('reports.names_to_replace', 'Følgende navn vil bli erstattet med generelle betegnelser:')}
             </Typography>
             
             {/* Replacements list */}
@@ -895,7 +806,7 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
             
             {/* Text preview with highlighting */}
             <Stack spacing={2}>
-              <Typography variant="subtitle2">Tekst med endringer markert:</Typography>
+              <Typography variant="subtitle2">{t('reports.text_with_changes', 'Tekst med endringer markert:')}</Typography>
               <Box sx={{ p: 2, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'divider', maxHeight: 300, overflow: 'auto' }}>
                 <Typography variant="body2" component="div" sx={{ whiteSpace: 'pre-wrap' }}>
                   {previewChanges.corrected.split(new RegExp(`(${previewChanges.replacements.map(r => r.to).join('|')})`, 'g')).map((part, idx) => {
@@ -915,10 +826,10 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
             {/* Action buttons */}
             <Stack direction="row" spacing={2} justifyContent="flex-end">
               <Button onClick={() => setShowPreview(false)} variant="outlined">
-                Avbryt
+                {t('common.cancel', 'Avbryt')}
               </Button>
               <Button onClick={applyCorrections} variant="contained" color="success">
-                ✅ Godta endringer
+                {t('reports.accept_changes', '✅ Godta endringer')}
               </Button>
             </Stack>
           </Stack>
@@ -929,11 +840,23 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
 }
 
 function SendTimesheet({ month, onToast, settings, updateSettings }: { month: string; onToast: (msg: string, sev?: any) => void; settings: any; updateSettings: any }) {
+  const { t } = useTranslations();
   const [busy, setBusy] = useState(false);
   const [googleConnected, setGoogleConnected] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
-  const recipient = settings?.timesheet_recipient || '';
-  const format = settings?.timesheet_format || 'xlsx';
+  const [useGmail, setUseGmail] = useState(false);
+  // Local, non-persisted form state to avoid lag while typing
+  const [sender, setSender] = useState<string>(settings?.timesheet_sender || '');
+  const [recipient, setRecipient] = useState<string>(settings?.timesheet_recipient || '');
+  const [format, setFormat] = useState<'xlsx' | 'pdf'>(settings?.timesheet_format || 'xlsx');
+  const [smtpPass, setSmtpPass] = useState<string>(settings?.smtp_app_password || '');
+  // Sync when settings change externally (e.g., after save elsewhere)
+  useEffect(() => {
+    setSender(settings?.timesheet_sender || '');
+    setRecipient(settings?.timesheet_recipient || '');
+    setFormat((settings?.timesheet_format as 'xlsx' | 'pdf') || 'xlsx');
+    setSmtpPass(settings?.smtp_app_password || '');
+  }, [settings]);
 
   // Check Google auth status on mount
   useEffect(() => {
@@ -941,6 +864,9 @@ function SendTimesheet({ month, onToast, settings, updateSettings }: { month: st
       try {
         const status = await getGoogleAuthStatus();
         setGoogleConnected(status.isConnected && !status.needsReauth);
+        if (status.isConnected && !status.needsReauth) {
+          setUseGmail(true); // Default to Gmail if connected
+        }
       } catch (e) {
         console.error('Failed to check Google auth:', e);
       } finally {
@@ -953,12 +879,21 @@ function SendTimesheet({ month, onToast, settings, updateSettings }: { month: st
     setBusy(true);
     try {
       await sendTimesheetViaGmail({ month, recipientEmail: recipient, format });
-      onToast('Timeliste sendt via Gmail', 'success');
+      onToast(t('timesheet.sent_via_gmail', 'Timeliste sendt via Gmail'), 'success');
     } catch (e:any) {
-      onToast(`Kunne ikke sende: ${e?.message || e}`, 'error');
+      onToast(`${t('timesheet.send_failed', 'Kunne ikke sende')}: ${e?.message || e}`, 'error');
     } finally { setBusy(false); }
   }
 
+  async function handleSendSMTP() {
+    setBusy(true);
+    try {
+      await sendTimesheet({ month, senderEmail: sender, recipientEmail: recipient, format });
+      onToast(t('timesheet.sent_via_smtp', 'Timeliste sendt via SMTP'), 'success');
+    } catch (e:any) {
+      onToast(`${t('timesheet.send_failed', 'Kunne ikke sende')}: ${e?.message || e}`, 'error');
+    } finally { setBusy(false); }
+  }
 
   if (checkingAuth) {
     return <CircularProgress size={24} />;
@@ -966,82 +901,120 @@ function SendTimesheet({ month, onToast, settings, updateSettings }: { month: st
 
   return (
     <Stack spacing={2}>
-      {googleConnected ? (
+      {googleConnected && (
+        <Stack direction="row" spacing={2} alignItems="center">
+          <Chip label={t('gmail.connected', 'Google-konto tilkoblet')} color="success" size="small" />
+          <FormControl size="small">
+            <InputLabel>{t('timesheet.method', 'Sendemetode')}</InputLabel>
+            <Select label={t('timesheet.method', 'Sendemetode')} value={useGmail ? 'gmail' : 'smtp'} onChange={(e)=>setUseGmail(e.target.value === 'gmail')}>
+              <MenuItem value="gmail">{t('timesheet.gmail_recommended', 'Gmail (anbefalt)')}</MenuItem>
+              <MenuItem value="smtp">SMTP</MenuItem>
+            </Select>
+          </FormControl>
+        </Stack>
+      )}
+      
+      {useGmail && googleConnected ? (
         <>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-          <TextField label="Tittel" value={manualTitle} onChange={(e) => setManualTitle(e.target.value)} fullWidth />
-          <TextField label="Saksnummer (Klient ID)" value={manualCaseId} onChange={(e)=>setManualCaseId(e.target.value)} fullWidth placeholder="f.eks. KLIENT-123" InputProps={{ list: 'case-suggestions' }} />
-          <datalist id="case-suggestions">
-            {myCases.map((c)=> (<option key={c} value={c} />))}
-          </datalist>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+            <TextField
+              label={t('fields.recipient_email', 'Mottaker e-post')}
+              value={recipient}
+              onChange={(e)=> setRecipient(e.target.value)}
+              onBlur={() => updateSettings({ timesheet_recipient: recipient })}
+              fullWidth
+            />
             <FormControl>
-              <InputLabel>Format</InputLabel>
-              <Select label="Format" value={format} onChange={(e)=>updateSettings({timesheet_format: e.target.value})}>
+              <InputLabel>{t('fields.format', 'Format')}</InputLabel>
+              <Select
+                label={t('fields.format', 'Format')}
+                value={format}
+                onChange={(e)=> { const v = e.target.value as 'xlsx' | 'pdf'; setFormat(v); updateSettings({timesheet_format: v}); }}
+              >
                 <MenuItem value="xlsx">XLSX</MenuItem>
                 <MenuItem value="pdf">PDF</MenuItem>
               </Select>
             </FormControl>
           </Stack>
-          <Button variant="contained" onClick={handleSendGmail} disabled={busy || !recipient}>Send via Gmail</Button>
-          <Typography variant="caption" color="text.secondary">E-posten sendes fra din tilkoblede Google-konto.</Typography>
+          <Button variant="contained" onClick={handleSendGmail} disabled={busy || !recipient}>{t('timesheet.send_via_gmail', 'Send via Gmail')}</Button>
+          <Typography variant="caption" color="text.secondary">{t('timesheet.gmail_note', 'E-posten sendes fra din tilkoblede Google-konto.')}</Typography>
         </>
       ) : (
-        <Stack spacing={1.5} sx={{ p: 2, bgcolor: 'rgba(25,118,210,0.08)', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-          <Typography variant="body2" fontWeight="bold">
-            Send timelisten raskere – koble til Google
-          </Typography>
-          <Box
-            component="button"
-            type="button"
-            onClick={async () => {
-              try {
-                const authUrl = await initiateGoogleAuth();
-                window.location.href = authUrl;
-              } catch (e: any) {
-                onToast(`Kunne ikke starte Google-pålogging: ${e?.message || e}`, 'error');
-              }
-            }}
-            aria-label="Fortsett med Google"
-            sx={{
-              alignSelf: 'flex-start',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 1,
-              bgcolor: '#FFFFFF',
-              color: '#1F1F1F',
-              border: '1px solid #747775',
-              textTransform: 'none',
-              fontWeight: 500,
-              fontFamily: 'Roboto, system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif',
-              borderRadius: 1,
-              px: 1.5,
-              py: 0.75,
-              boxShadow: 'none',
-              cursor: 'pointer',
-              '&:hover': { bgcolor: '#F7F8F8', boxShadow: 'none' },
-            }}
-          >
-            <Box component="svg" viewBox="0 0 48 48" sx={{ width: 18, height: 18, display: 'block' }}>
-              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
-              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
-              <path fill="none" d="M0 0h48v48H0z" />
-            </Box>
-            <Typography sx={{ fontSize: 14, lineHeight: '20px' }}>Fortsett med Google</Typography>
-          </Box>
+        <>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+            <TextField
+              label={t('fields.sender_email', 'Avsender e-post')}
+              value={sender}
+              onChange={(e)=> setSender(e.target.value)}
+              onBlur={() => updateSettings({ timesheet_sender: sender })}
+              fullWidth
+            />
+            <TextField
+              label={t('fields.recipient_email', 'Mottaker e-post')}
+              value={recipient}
+              onChange={(e)=> setRecipient(e.target.value)}
+              onBlur={() => updateSettings({ timesheet_recipient: recipient })}
+              fullWidth
+            />
+            <FormControl>
+              <InputLabel>{t('fields.format', 'Format')}</InputLabel>
+              <Select
+                label={t('fields.format', 'Format')}
+                value={format}
+                onChange={(e)=> { const v = e.target.value as 'xlsx' | 'pdf'; setFormat(v); updateSettings({timesheet_format: v}); }}
+              >
+                <MenuItem value="xlsx">XLSX</MenuItem>
+                <MenuItem value="pdf">PDF</MenuItem>
+              </Select>
+            </FormControl>
+          </Stack>
+          <TextField
+            type="password"
+            label={t('fields.smtp_app_password', 'App-passord (SMTP)')}
+            value={smtpPass}
+            onChange={(e)=> setSmtpPass(e.target.value)}
+            onBlur={() => updateSettings({ smtp_app_password: smtpPass })}
+            fullWidth
+          />
+          <Button variant="contained" onClick={handleSendSMTP} disabled={busy || !sender || !recipient}>{t('timesheet.send_via_smtp', 'Send via SMTP')}</Button>
           <Typography variant="caption" color="text.secondary">
-            Vi bruker din Google‑konto for å sende timelisten (Gmail). Du kan koble fra senere i Innstillinger.
+            {googleConnected ? t('timesheet.smtp_mode', 'SMTP-modus: ') : t('timesheet.connect_google_hint', 'Koble til Google-kontoen din for enklere sending, eller ')}
+            {t('timesheet.smtp_hint', 'Vi gjetter SMTP basert på e-post (Gmail/Outlook/Yahoo/iCloud/Proton m.fl.). Bruk app-passord for Gmail/Outlook.')}
           </Typography>
-        </Stack>
+        </>
       )}
     </Stack>
   );
 }
 
+// Lightweight client-only lazy mount (no code-splitting, defers rendering until visible)
+function LazyMount({ children, rootMargin = '200px' }: { children: React.ReactNode; rootMargin?: string }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (typeof window === 'undefined' || !("IntersectionObserver" in window)) {
+      setShow(true);
+      return;
+    }
+    const obs = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setShow(true);
+        obs.disconnect();
+      }
+    }, { rootMargin });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [rootMargin]);
+  return <div ref={ref}>{show ? children : <Box sx={{ py: 2, display: 'flex', justifyContent: 'center' }}><CircularProgress size={20} /></Box>}</div>;
+}
+
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const { enqueueSnackbar, closeSnackbar } = useSnackbar();
+  const { t } = useTranslations();
+  const { mode, toggleMode } = useThemeMode();
   const showToast = (msg: string, sev: any = "success") => enqueueSnackbar(msg, { variant: sev });
   
   // Section refs for mobile navigation
@@ -1051,34 +1024,20 @@ export default function Home() {
   const logsRef = useRef<HTMLDivElement>(null);
   const importRef = useRef<HTMLDivElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [manualOpen, setManualOpen] = useState(false);
   const [mobileDialogOpen, setMobileDialogOpen] = useState(false);
   const [mobileDialogContent, setMobileDialogContent] = useState<"stamp-work" | "stamp-meeting" | "manual-entry" | "import" | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [statsOpen, setStatsOpen] = useState(false);
-
-  // Onboarding
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
-  const [onbRateInput, setOnbRateInput] = useState("");
-  const [onbStart, setOnbStart] = useState("09:00");
-  const [onbEnd, setOnbEnd] = useState("17:00");
-  const [onbDays, setOnbDays] = useState<{ [k: number]: boolean }>({ 1: true, 2: true, 3: true, 4: true, 5: true });
-  const [onbApplyNow, setOnbApplyNow] = useState(false);
-  const [onbBusy, setOnbBusy] = useState(false);
-  const [onbChecked, setOnbChecked] = useState(false);
   
   // Database-backed settings
   const { settings, updateSettings: updateSettingsDb, mutate: mutateSettings } = useUserSettings();
   const { templates, createTemplate, deleteTemplate } = useQuickTemplates();
   const { projectInfo, isLoading: projectLoading } = useProjectInfo();
-  const canAddWeekends = useMemo(() => (projectInfo?.tiltak || '').toLowerCase().includes('miljøarbeider'), [projectInfo?.tiltak]);
   
   // Wrapper to update settings with toast
   const updateSettings = async (partial: any) => {
     try {
       await updateSettingsDb(partial);
     } catch (e: any) {
-      showToast(`Feil ved lagring: ${e?.message || e}`, 'error');
+      showToast(`${t('common.save_failed', 'Feil ved lagring')}: ${e?.message || e}`, 'error');
     }
   };
 
@@ -1102,7 +1061,7 @@ export default function Home() {
         notes: r.notes || undefined,
       });
       await mutate();
-      showToast("Sletting angret");
+      showToast(t('common.deletion_undone', 'Sletting angret'));
     } else if (undo.type === "update") {
       const { id, prev } = undo;
       await updateLog(id, {
@@ -1117,7 +1076,7 @@ export default function Home() {
         notes: (prev.notes as any) ?? null,
       });
       await mutate();
-      showToast("Endring angret");
+      showToast(t('common.change_undone', 'Endring angret'));
     }
     setUndo(null);
   }
@@ -1138,35 +1097,37 @@ export default function Home() {
   const [manualProject, setManualProject] = useState("");
   const [manualPlace, setManualPlace] = useState("");
   const [manualNotes, setManualNotes] = useState("");
-  const [manualCaseId, setManualCaseId] = useState("");
-  const [myCases, setMyCases] = useState<string[]>([]);
-  useEffect(() => {
-    try {
-      const token = localStorage.getItem('company_token');
-      if (!token) return;
-      (async () => {
-        const res = await fetch(`${API_BASE}/api/company/my-cases`, { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json();
-        if (res.ok && Array.isArray(data.cases)) setMyCases(data.cases.map((c:any)=>c.case_id));
-      })();
-    } catch {}
-  }, []);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchQuery), 200);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+  const deferredSearch = useDeferredValue(debouncedSearch);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkMode, setBulkMode] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
-  const [viewMode, setViewMode] = useState<'month' | 'week'>(settings?.view_mode || 'month');
+  const [viewMode, setViewMode] = useState<'month' | 'week'>(() => {
+    try {
+      const v = typeof window !== 'undefined' ? window.localStorage.getItem('view_mode') : null;
+      if (v === 'month' || v === 'week') return v;
+    } catch { void 0; }
+    return 'month';
+  });
+  const [monthInput, setMonthInput] = useState<string>(settings?.month_nav || dayjs().format("YYYYMM"));
+  useEffect(() => { setMonthInput(settings?.month_nav || dayjs().format("YYYYMM")); }, [settings?.month_nav]);
   
-  // Sync view mode from settings
+  // Sync view mode from settings (server wins and updates localStorage)
   useEffect(() => {
-    if (settings?.view_mode) {
-      setViewMode(settings.view_mode as 'month' | 'week');
+    if (settings?.view_mode === 'month' || settings?.view_mode === 'week') {
+      setViewMode(settings.view_mode);
+      try { if (typeof window !== 'undefined') window.localStorage.setItem('view_mode', settings.view_mode); } catch { void 0; }
     }
   }, [settings?.view_mode]);
   
   // Update view mode in database
   const updateViewMode = async (mode: 'month' | 'week') => {
     setViewMode(mode);
+    try { if (typeof window !== 'undefined') window.localStorage.setItem('view_mode', mode); } catch { void 0; }
     try {
       await updateSettings({ view_mode: mode });
     } catch (e) {
@@ -1174,71 +1135,6 @@ export default function Home() {
     }
   };
 
-  // Settings from database with fallbacks
-  const rate = settings?.hourly_rate || 0;
-  // Open onboarding once if not completed
-  useEffect(() => {
-    if (!onbChecked && settings && projectInfo !== undefined) {
-      setOnbChecked(true);
-      if (!settings.onboarding_done) {
-        setOnbRateInput(formatRate(rate));
-        setOnboardingOpen(true);
-      }
-    }
-  }, [settings, projectInfo, rate, onbChecked]);
-  const [rateInput, setRateInput] = useState<string>("");
-  useEffect(() => { setRateInput(formatRate(rate)); }, [rate]);
-  const paidBreak = settings?.paid_break || false;
-  const taxPct = Number(settings?.tax_pct) || 35;
-  // Month navigation: local state for instant UI, persisted to settings
-  const [monthNavLocal, setMonthNavLocal] = useState<string>(settings?.month_nav || dayjs().format("YYYYMM"));
-  useEffect(() => {
-    if (settings?.month_nav && settings.month_nav !== monthNavLocal) {
-      setMonthNavLocal(settings.month_nav);
-    }
-  }, [settings?.month_nav]);
-
-  const [calcBusy, setCalcBusy] = useState(false);
-  const getKey = (index: number) => {
-    const m = dayjs(monthNavLocal + "01").subtract(index, "month").format("YYYYMM");
-    return ["logs", m] as const;
-  };
-  const { data, isLoading, isValidating, mutate, size, setSize } = useSWRInfinite(
-    getKey,
-    ([, m]) => fetchLogs(m, showArchived),
-    { revalidateOnFocus: false }
-  );
-  const allLogs: LogRow[] = (data || []).flat();
-  
-  // Filter logs based on search query and view mode
-  const logs = useMemo(() => {
-    let filtered = allLogs;
-    
-    // Apply week filter if in week mode
-    if (viewMode === 'week') {
-      const startOfWeek = dayjs().startOf('week');
-      const endOfWeek = dayjs().endOf('week');
-      filtered = filtered.filter(l => {
-        const logDate = dayjs(l.date);
-        return logDate.isAfter(startOfWeek.subtract(1, 'day')) && logDate.isBefore(endOfWeek.add(1, 'day'));
-      });
-    }
-    
-    // Apply search filter
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(l => 
-        l.title?.toLowerCase().includes(q) ||
-        l.project?.toLowerCase().includes(q) ||
-        l.place?.toLowerCase().includes(q) ||
-        l.notes?.toLowerCase().includes(q) ||
-        l.activity?.toLowerCase().includes(q)
-      );
-    }
-    
-    return filtered;
-  }, [allLogs, searchQuery, viewMode]);
-  
   // Detect active stamp (today's entry with same start/end time)
   const activeStamp = useMemo(() => {
     const today = dayjs().format("YYYY-MM-DD");
@@ -1264,26 +1160,70 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [activeStamp]);
 
-  // Live clock (Europe/Oslo, fallback to local)
-  const [nowTime, setNowTime] = useState<string>(dayjs().format('HH:mm:ss'));
+  // Settings from database with fallbacks
+  const rate = settings?.hourly_rate || 0;
+  const [rateInput, setRateInput] = useState<string>("");
+  useEffect(() => { setRateInput(formatRate(rate)); }, [rate]);
+  const rateForCalc = (() => { const n = parseRate(rateInput.replace(/\s/g, '')); return Number.isFinite(n) ? n : rate; })();
+  const [paidBreakLocal, setPaidBreakLocal] = useState<boolean>(!!settings?.paid_break);
+  useEffect(() => { setPaidBreakLocal(!!settings?.paid_break); }, [settings?.paid_break]);
+  const [taxPctLocal, setTaxPctLocal] = useState<number>(Number(settings?.tax_pct) || 35);
+  useEffect(() => { setTaxPctLocal(Number(settings?.tax_pct) || 35); }, [settings?.tax_pct]);
+  const monthNav = settings?.month_nav || dayjs().format("YYYYMM");
+  const [calcBusy, setCalcBusy] = useState(false);
+  const [showArchivedLocal, setShowArchivedLocal] = useState<boolean>(() => {
+    try {
+      const stored = typeof window !== 'undefined' ? window.localStorage.getItem('show_archived') : null;
+      if (stored != null) return stored === 'true';
+    } catch { void 0; }
+    const s = (settings as any)?.show_archived;
+    return typeof s === 'boolean' ? s : false;
+  });
   useEffect(() => {
-    const update = () => {
-      try {
-        const s = new Intl.DateTimeFormat('nb-NO', {
-          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-          timeZone: 'Europe/Oslo'
-        }).format(new Date());
-        // Ensure HH:MM:SS
-        setNowTime(s.replace(/\./g, ':'));
-      } catch {
-        setNowTime(dayjs().format('HH:mm:ss'));
-      }
-    };
-    update();
-    const t = setInterval(update, 1000);
-    return () => clearInterval(t);
-  }, []);
+    if (typeof settings?.show_archived === 'boolean') {
+      setShowArchivedLocal(!!settings.show_archived);
+      try { if (typeof window !== 'undefined') localStorage.setItem('show_archived', String(!!settings.show_archived)); } catch { void 0; }
+    }
+  }, [settings?.show_archived]);
+  const getKey = (index: number) => {
+    const m = dayjs(monthNav + "01").subtract(index, "month").format("YYYYMM");
+    return ["logs", m, showArchivedLocal ? 'archived' : 'active'] as const;
+  };
+  const { data, isLoading, isValidating, mutate, size, setSize } = useSWRInfinite(
+    getKey,
+    ([, m]) => fetchLogs(m, showArchivedLocal),
+    { revalidateOnFocus: false }
+  );
+  const allLogs: LogRow[] = (data || []).flat();
   
+  // Filter logs based on search query and view mode
+  const logs = useMemo(() => {
+    let filtered = allLogs;
+    
+    // Apply week filter if in week mode
+    if (viewMode === 'week') {
+      const startOfWeek = dayjs().startOf('week');
+      const endOfWeek = dayjs().endOf('week');
+      filtered = filtered.filter(l => {
+        const logDate = dayjs(l.date);
+        return logDate.isAfter(startOfWeek.subtract(1, 'day')) && logDate.isBefore(endOfWeek.add(1, 'day'));
+      });
+    }
+    
+    // Apply search filter (debounced)
+    if (deferredSearch.trim()) {
+      const q = deferredSearch.toLowerCase();
+      filtered = filtered.filter(l => 
+        l.title?.toLowerCase().includes(q) ||
+        l.project?.toLowerCase().includes(q) ||
+        l.place?.toLowerCase().includes(q) ||
+        l.notes?.toLowerCase().includes(q) ||
+        l.activity?.toLowerCase().includes(q)
+      );
+    }
+    
+    return filtered;
+  }, [allLogs, deferredSearch, viewMode]);
   const totalHours = useMemo(() => {
     return logs.reduce((sum, r) => {
       const d = dayjs(r.date);
@@ -1291,9 +1231,11 @@ export default function Home() {
       if (dow === 0 || dow === 6) return sum; // Mon–Fri only
       const start = dayjs(`${r.date} ${r.start_time}`);
       const end = dayjs(`${r.date} ${r.end_time}`);
-      const breakUsed = paidBreak ? 0 : Number(r.break_hours || 0);
-      const diff = end.diff(start, "minute") / 60 - breakUsed;
-      return sum + Math.max(0, diff);
+      const breakUsed = paidBreakLocal ? 0 : safeNumber(r.break_hours, 0);
+      const minutes = end.diff(start, 'minute');
+      const diffHours = minutes / 60 - breakUsed;
+      if (!Number.isFinite(diffHours) || diffHours <= 0) return sum;
+      return sum + diffHours;
     }, 0);
   }, [logs, paidBreak]);
   
@@ -1302,32 +1244,15 @@ export default function Home() {
       const d = dayjs(r.date);
       const dow = d.day();
       if (dow === 0 || dow === 6) return sum; // Mon–Fri only
-      return sum + Number(r.expense_coverage || 0);
+      const val = safeNumber(r.expense_coverage, 0);
+      return sum + val;
     }, 0);
   }, [logs]);
-
-  // Extra expenses added by user (not per-row), nb-NO formatted input
-  const [extraExpensesInput, setExtraExpensesInput] = useState<string>("");
-  const extraExpenses = useMemo(() => {
-    const n = parseRate(extraExpensesInput);
-    return Number.isFinite(n) ? n : 0;
-  }, [extraExpensesInput]);
   useEffect(() => {
     setCalcBusy(true);
     const t = setTimeout(() => setCalcBusy(false), 150);
     return () => clearTimeout(t);
-  }, [taxPct, rate, paidBreak, logs]);
-
-  // Only show skeleton if busy persists to avoid flicker
-  const [showCalcSkeleton, setShowCalcSkeleton] = useState(false);
-  useEffect(() => {
-    if (calcBusy) {
-      const h = setTimeout(() => setShowCalcSkeleton(true), 400);
-      return () => { clearTimeout(h); setShowCalcSkeleton(false); };
-    } else {
-      setShowCalcSkeleton(false);
-    }
-  }, [calcBusy]);
+  }, [taxPctLocal, rateForCalc, paidBreakLocal, logs]);
 
   async function handleQuickStamp() {
     await createLog({
@@ -1343,48 +1268,11 @@ export default function Home() {
     });
     setQuickNotes("");
     await mutate();
-    showToast("Stempling registrert");
-  }
-
-  // Archive handlers
-  async function handleArchive(row: LogRow) {
-    try {
-      await archiveLog(row.id);
-      await mutate();
-      showToast("Logg arkivert");
-    } catch (e: any) {
-      showToast(`Arkivering feilet: ${e?.message || e}`, "error");
-    }
-  }
-
-  // Row action menu (mobile)
-  const [actionAnchor, setActionAnchor] = useState<null | HTMLElement>(null);
-  const [actionRow, setActionRow] = useState<LogRow | null>(null);
-  const openActions = (e: React.MouseEvent<HTMLElement>, row: LogRow) => { setActionAnchor(e.currentTarget); setActionRow(row); };
-  const closeActions = () => { setActionAnchor(null); setActionRow(null); };
-
-  async function handleUnarchive(row: LogRow) {
-    try {
-      await unarchiveLog(row.id);
-      await mutate();
-      showToast("Logg gjenopprettet");
-    } catch (e: any) {
-      showToast(`Gjenoppretting feilet: ${e?.message || e}`, "error");
-    }
-  }
-
-  async function handleArchiveMonth() {
-    try {
-      await archiveLogsByMonth(monthNavLocal);
-      await mutate();
-      showToast(`Alle logger for ${formatMonthLabel(monthNavLocal)} arkivert`, "success");
-    } catch (e: any) {
-      showToast(`Arkivering feilet: ${e?.message || e}`, "error");
-    }
+    showToast(t('home.stamp_recorded', 'Stempling registrert'));
   }
 
   // Quick stamp from FAB
-  async function handleQuickStampFromFAB(template: any, caseId?: string) {
+  async function handleQuickStampFromFAB(template: any) {
     await createLog({
       date: dayjs().format("YYYY-MM-DD"),
       start: dayjs().format("HH:mm"),
@@ -1395,10 +1283,9 @@ export default function Home() {
       project: template.project || undefined,
       place: template.place || undefined,
       notes: undefined,
-      caseId: caseId || undefined,
     });
     await mutate();
-    showToast(`Stemplet inn: ${template.activity === 'Work' ? 'Arbeid' : 'Møte'}`);
+    showToast(`${t('home.stamped_in', 'Stemplet inn')}: ${template.activity === 'Work' ? t('stats.work', 'Arbeid') : t('stats.meetings', 'Møte')}`);
   }
 
   // Stamp out from FAB
@@ -1417,88 +1304,51 @@ export default function Home() {
       expenseCoverage: 0,
     });
     await mutate();
-    showToast("Stemplet ut");
+    showToast(t('home.stamped_out', 'Stemplet ut'));
   }
 
   async function handleAddManual() {
-    // Validation
-    if (!dayjs(date, "YYYY-MM-DD", true).isValid()) {
-      showToast("Ugyldig dato format. Bruk YYYY-MM-DD", "error");
-      return;
-    }
-
-    const timePattern = /^\d{2}:\d{2}$/;
-    if (!timePattern.test(start)) {
-      showToast("Ugyldig tidsformat for 'Inn'. Bruk HH:MM", "error");
-      return;
-    }
-    if (!timePattern.test(end)) {
-      showToast("Ugyldig tidsformat for 'Ut'. Bruk HH:MM", "error");
-      return;
-    }
-
-    if (end < start) {
-      showToast("'Ut' må være etter 'Inn'", "error");
-      return;
-    }
-
-    if (breakHours < 0) {
-      showToast("Pause kan ikke være negativ", "error");
-      return;
-    }
-
-    if (expenseCoverage < 0) {
-      showToast("Utgiftsdekning kan ikke være negativ", "error");
-      return;
-    }
-
-    // All validation passed, submit
-    try {
-      await createLog({
-        date,
-        start,
-        end,
-        breakHours: Number(breakHours) || 0,
-        expenseCoverage: Number(expenseCoverage) || 0,
-        activity: manualActivity,
-        title: manualTitle || undefined,
-        project: manualProject || undefined,
-        place: manualPlace || undefined,
-        notes: manualNotes || undefined,
-        caseId: manualCaseId || undefined,
-      });
-      // Clear form after submit
-      setDate(dayjs().format("YYYY-MM-DD"));
-      setStart(dayjs().format("HH:mm"));
-      setEnd(dayjs().format("HH:mm"));
-      setBreakHours(0);
-      setExpenseCoverage(0);
-      setManualTitle("");
-      setManualProject("");
-      setManualPlace("");
-      setManualNotes("");
-      await mutate();
-      showToast("Rad lagt til");
-    } catch (e: any) {
-      showToast(`Feil ved lagring: ${e?.message || e}`, "error");
-    }
+    await createLog({
+      date,
+      start,
+      end,
+      breakHours: Number(breakHours) || 0,
+      expenseCoverage: Number(expenseCoverage) || 0,
+      activity: manualActivity,
+      title: manualTitle || undefined,
+      project: manualProject || undefined,
+      place: manualPlace || undefined,
+      notes: manualNotes || undefined,
+    });
+    // Clear form after submit
+    setDate(dayjs().format("YYYY-MM-DD"));
+    setStart(dayjs().format("HH:mm"));
+    setEnd(dayjs().format("HH:mm"));
+    setBreakHours(0);
+    setExpenseCoverage(0);
+    setManualTitle("");
+    setManualProject("");
+    setManualPlace("");
+    setManualNotes("");
+    await mutate();
+    showToast(t('home.row_added', 'Rad lagt til'));
   }
 
   async function handleDelete(row: LogRow) {
     await deleteLog(row.id);
     await mutate();
     setUndo({ type: "delete", row });
-    const key = enqueueSnackbar("Rad slettet", {
+    const key = enqueueSnackbar(t('home.row_deleted', 'Rad slettet'), {
       variant: "info",
       autoHideDuration: 5000,
       action: () => (
-        <Button color="secondary" size="small" onClick={async () => { await handleUndo(); closeSnackbar(key as any); }}>Angre</Button>
+        <Button color="secondary" size="small" onClick={async () => { await handleUndo(); closeSnackbar(key as any); }}>{t('common.undo', 'Angre')}</Button>
       )
     } as any);
   }
 
   async function handleBulkDelete() {
-    if (!confirm(`Sikker på at du vil slette ${selectedIds.size} rader?`)) return;
+    if (!confirm(`${t('confirm.delete_rows', 'Sikker på at du vil slette')} ${selectedIds.size} ${t('table.rows', 'rader')}?`)) return;
     for (const id of selectedIds) {
       await deleteLog(id);
     }
@@ -1523,25 +1373,6 @@ export default function Home() {
     setSelectedIds(new Set());
   }
 
-  const parentRef = useMemo(() => ({ current: null as any }), []);
-
-  // Responsive helpers
-  const theme = useTheme();
-  const isMdDown = useMediaQuery(theme.breakpoints.down('md'));
-
-  function weekdayShort(dateStr: string) {
-    if (!dateStr) return '';
-    const d = dayjs(dateStr).day();
-    const names = ['Søn','Man','Tir','Ons','Tor','Fre','Lør'];
-    return names[d] || '';
-  }
-
-  const rowVirtualizer = useVirtualizer({
-    count: logs.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 40,
-    overscan: 8,
-  });
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
@@ -1576,11 +1407,11 @@ export default function Home() {
   async function saveEdit(id: string, prevRow?: LogRow) {
     if (prevRow) {
       setUndo({ type: "update", id, prev: prevRow as any });
-      const key = enqueueSnackbar("Endring lagret", {
+      const key = enqueueSnackbar(t('home.change_saved', 'Endring lagret'), {
         variant: "success",
         autoHideDuration: 5000,
         action: () => (
-          <Button color="secondary" size="small" onClick={async () => { await handleUndo(); closeSnackbar(key as any); }}>Angre</Button>
+          <Button color="secondary" size="small" onClick={async () => { await handleUndo(); closeSnackbar(key as any); }}>{t('common.undo', 'Angre')}</Button>
         )
       } as any);
     }
@@ -1593,42 +1424,22 @@ export default function Home() {
       expenseCoverage: editForm.expenseCoverage || 0,
     });
     await mutate();
-    showToast("Rad oppdatert");
+    showToast(t('home.row_updated', 'Rad oppdatert'));
     cancelEdit();
   }
 
-  // Infinite scroll: load previous month when near bottom
-  useEffect(() => {
-    const el = parentRef.current as HTMLElement | null;
-    if (!el) return;
-    function onScroll() {
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80 && !isValidating) {
-        setSize((s) => s + 1);
-      }
-    }
-    el.addEventListener("scroll", onScroll);
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [parentRef, isValidating, setSize]);
 
   // Keyboard shortcuts for month navigation (only when not typing in input)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-      if (e.key === "ArrowLeft") {
-        const prev = dayjs(monthNavLocal + "01").subtract(1, "month").format("YYYYMM");
-        setMonthNavLocal(prev);
-        updateSettings({month_nav: prev});
-      }
-      if (e.key === "ArrowRight") {
-        const next = dayjs(monthNavLocal + "01").add(1, "month").format("YYYYMM");
-        setMonthNavLocal(next);
-        updateSettings({month_nav: next});
-      }
+      if (e.key === "ArrowLeft") updateSettings({month_nav: dayjs(monthNav + "01").subtract(1, "month").format("YYYYMM")});
+      if (e.key === "ArrowRight") updateSettings({month_nav: dayjs(monthNav + "01").add(1, "month").format("YYYYMM")});
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [monthNavLocal, updateSettings]);
+  }, [monthNav, updateSettings]);
 
   // Setup gate: redirect to /setup if no project info in database
   const router = useRouter();
@@ -1647,19 +1458,18 @@ export default function Home() {
 
   // Initialize month_nav from project periode if not set
   useEffect(() => {
-    if (projectInfo && !hasInitializedMonth && (!monthNavLocal || monthNavLocal === dayjs().format("YYYYMM"))) {
+    if (projectInfo && !settingsLoading && !hasInitializedMonth && (!monthNav || monthNav === dayjs().format("YYYYMM"))) {
       const periode = projectInfo.periode;
       if (periode) {
         // Try to parse periode like "Desember 2024", "Q1 2025", "Januar 2025", etc.
         const parsed = parsePeriodeToYYYYMM(periode);
-        if (parsed && parsed !== monthNavLocal) {
-          setMonthNavLocal(parsed);
+        if (parsed && parsed !== monthNav) {
           updateSettings({ month_nav: parsed });
         }
       }
       setHasInitializedMonth(true);
     }
-  }, [projectInfo, monthNavLocal, hasInitializedMonth, updateSettings]);
+  }, [projectInfo, monthNav, settingsLoading, hasInitializedMonth, updateSettings]);
 
   // Helper to parse periode text to YYYYMM format
   function parsePeriodeToYYYYMM(periode: string): string | null {
@@ -1726,7 +1536,7 @@ export default function Home() {
       setQuickActivity("Meeting");
       stemplingRef.current?.scrollIntoView({ behavior: "smooth" });
     } else if (action === "manual-entry") {
-      setManualOpen(true);
+      manualRef.current?.scrollIntoView({ behavior: "smooth" });
     } else if (action === "import") {
       importRef.current?.scrollIntoView({ behavior: "smooth" });
     }
@@ -1751,7 +1561,7 @@ export default function Home() {
         className="sr-only" 
         style={{ position: 'absolute', left: '-10000px', width: '1px', height: '1px', overflow: 'hidden' }}
       >
-        {isLoading ? 'Laster data...' : `${logs.length} loggføringer lastet for ${monthNavLocal}`}
+        {isLoading ? t('aria.loading', 'Laster data...') : `${logs.length} ${t('aria.logs_loaded', 'loggføringer lastet for')} ${monthNav}`}
       </div>
       <MigrationBanner onComplete={() => mutateSettings()} />
       <Stack 
@@ -1761,48 +1571,29 @@ export default function Home() {
         spacing={2}
         sx={{ mb: 2 }}
       >
-        <Typography variant="h4">Smart Stempling</Typography>
+        <Typography variant="h4">{t('app.name', 'Smart Stempling')}</Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent={{ xs: "center", sm: "flex-end" }}>
-          <IconButton onClick={useThemeMode().toggleMode} size="small" title="Bytt tema">
-            {useThemeMode().mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
+          <IconButton onClick={toggleMode} size="small" title={t('tooltips.switch_theme', 'Bytt tema')} aria-label={t('tooltips.switch_theme', 'Bytt tema')}>
+            {mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
           </IconButton>
           <Link href="/reports" passHref legacyBehavior>
             <Button 
               variant="outlined" 
               size="small"
-              aria-label="Se rapporter"
-              title="Se rapporter"
-            >
-              Rapporter
+              aria-label={t('tooltips.view_reports', 'Se rapporter')}
+              title={t('tooltips.view_reports', 'Se rapporter')}
+>
+              {t('nav.reports', 'Rapporter')}
             </Button>
           </Link>
-          <Button 
-            variant="outlined" 
-            size="small"
-            startIcon={<BarChartIcon fontSize="small" />}
-            aria-label="Åpne nøkkeltall"
-            title="Månedsfilter og nøkkeltall"
-            onClick={() => setStatsOpen(true)}
-          >
-            Nøkkeltall
-          </Button>
-          <Button 
-            variant="outlined" 
-            size="small"
-            aria-label="Åpne avanserte verktøy"
-            title="Avanserte verktøy"
-            onClick={() => setAdvancedOpen(true)}
-          >
-            Avanserte verktøy
-          </Button>
           <Link href="/setup" passHref legacyBehavior>
             <Button 
               variant="outlined" 
               size="small"
-              aria-label="Rediger prosjektinformasjon"
-              title="Rediger prosjektinformasjon"
-            >
-              Prosjekt
+              aria-label={t('tooltips.edit_project_info', 'Rediger prosjektinformasjon')}
+              title={t('tooltips.edit_project_info', 'Rediger prosjektinformasjon')}
+>
+              {t('nav.project', 'Prosjekt')}
             </Button>
           </Link>
           <SettingsDrawer />
@@ -1815,28 +1606,28 @@ export default function Home() {
           <CardContent>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="caption" color="text.secondary">Konsulent</Typography>
+                <Typography variant="caption" color="text.secondary">{t('project_info.consultant', 'Konsulent')}</Typography>
                 <Typography variant="body1" fontWeight="medium">{projectInfo.konsulent}</Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="caption" color="text.secondary">Bedrift</Typography>
+                <Typography variant="caption" color="text.secondary">{t('project_info.company', 'Bedrift')}</Typography>
                 <Typography variant="body1" fontWeight="medium">{projectInfo.bedrift}</Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="caption" color="text.secondary">Oppdragsgiver</Typography>
+                <Typography variant="caption" color="text.secondary">{t('project_info.client', 'Oppdragsgiver')}</Typography>
                 <Typography variant="body1" fontWeight="medium">{projectInfo.oppdragsgiver}</Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Stack direction="row" spacing={1}>
                   {projectInfo.tiltak && (
                     <Box>
-                      <Typography variant="caption" color="text.secondary">Tiltak</Typography>
+                      <Typography variant="caption" color="text.secondary">{t('project_info.measure', 'Tiltak')}</Typography>
                       <Typography variant="body2">{projectInfo.tiltak}</Typography>
                     </Box>
                   )}
                   {projectInfo.periode && (
                     <Box>
-                      <Typography variant="caption" color="text.secondary">Periode</Typography>
+                      <Typography variant="caption" color="text.secondary">{t('project_info.period', 'Periode')}</Typography>
                       <Typography variant="body2">{projectInfo.periode}</Typography>
                     </Box>
                   )}
@@ -1847,240 +1638,388 @@ export default function Home() {
         </Card>
       )}
 
-      <Grid container spacing={2} justifyContent="center">
-        <Grid item xs={12} md={8} lg={6} ref={stemplingRef}>
+      <Grid container spacing={2}>
+        <Grid item xs={12} lg={4} ref={stemplingRef}>
           <Card>
-            <CardHeader title="Stempling" />
+            <CardHeader title={t('home.stamping', 'Stempling')} />
             <CardContent>
-              <Stack spacing={2} alignItems="center">
-                {/* Timer display */}
-                <Box sx={{ p: 2, bgcolor: activeStamp ? 'success.light' : 'action.hover', borderRadius: 1, width: '100%' }}>
-                  <Stack spacing={1} alignItems="center">
-                    <Typography variant="caption" color="text.secondary" fontWeight="bold">
-                      Tid
-                    </Typography>
-                    <Typography variant="h3" fontWeight="bold" color={activeStamp ? 'success.dark' : 'text.primary'}>
-                      {activeStamp ? elapsedTime : nowTime}
-                    </Typography>
-                    {activeStamp && (
-                      <Typography variant="caption" color="success.dark">
-                        Stemplet inn: {activeStamp.start_time?.slice(0,5)} · {activeStamp.activity === 'Work' ? 'Arbeid' : 'Møte'}
+              <Stack spacing={2}>
+                {activeStamp && (
+                  <Box sx={{ p: 2, bgcolor: 'success.light', borderRadius: 1 }}>
+                    <Stack spacing={1}>
+                      <Typography variant="caption" color="success.dark" fontWeight="bold">
+                        {t('home.stamped_in', 'Stemplet inn')}: {activeStamp.start_time?.slice(0,5)} - {activeStamp.activity === 'Work' ? t('stats.work', 'Arbeid') : t('stats.meetings', 'Møte')}
                       </Typography>
-                    )}
-                  </Stack>
-                </Box>
-
-                {/* Aktivitet */}
+                      <Typography variant="h4" color="success.dark" fontWeight="bold">
+                        {elapsedTime}
+                      </Typography>
+                    </Stack>
+                  </Box>
+                )}
                 <FormControl fullWidth>
-                  <InputLabel>Aktivitet</InputLabel>
+                  <InputLabel>{t('fields.activity', 'Aktivitet')}</InputLabel>
                   <Select
-                    label="Aktivitet"
+                    label={t('fields.activity', 'Aktivitet')}
                     value={quickActivity}
                     onChange={(e) => setQuickActivity(e.target.value as any)}
                   >
-                    <MenuItem value="Work">Arbeid</MenuItem>
-                    <MenuItem value="Meeting">Møte</MenuItem>
+                    <MenuItem value="Work">{t('stats.work', 'Arbeid')}</MenuItem>
+                    <MenuItem value="Meeting">{t('stats.meetings', 'Møte')}</MenuItem>
                   </Select>
                 </FormControl>
-
-                {/* Periode: Måned */}
-                <TextField
-                  type="month"
-                  label="Periode (Måned)"
-                  InputLabelProps={{ shrink: true }}
-                  value={dayjs(monthNavLocal + '01').format('YYYY-MM')}
-                  onChange={(e) => {
-                    const val = (e.target.value || '').replace(/[^0-9-]/g, '');
-                    const yyyymm = val.replace('-', '').slice(0,6);
-                    if (yyyymm.length === 6) { setMonthNavLocal(yyyymm); updateSettings({ month_nav: yyyymm }); }
-                  }}
-                  fullWidth
-                />
-
-                {/* Stamp button */}
-                {activeStamp ? (
-                  <Button variant="contained" color="error" onClick={handleStampOutFromFAB} size="large" sx={{ py: 1.5, width: '100%' }}>
-                    Stemple UT
-                  </Button>
-                ) : (
-                  <Button variant="contained" onClick={handleQuickStamp} size="large" sx={{ py: 1.5, width: '100%' }}>
-                    Stemple INN
-                  </Button>
-                )}
-
-                {/* Manual entry opener */}
-                <Button variant="outlined" onClick={() => setManualOpen(true)} sx={{ width: '100%' }}>
-                  Legg til manuelt
+                <TextField label={t('fields.title_meeting', 'Tittel / Møte')} value={quickTitle} onChange={(e) => setQuickTitle(e.target.value)} fullWidth />
+                <TextField label={t('fields.project_client', 'Prosjekt / Kunde')} value={quickProject} onChange={(e) => setQuickProject(e.target.value)} fullWidth />
+                <TextField label={t('fields.place_mode', 'Sted / Modus')} value={quickPlace} onChange={(e) => setQuickPlace(e.target.value)} fullWidth />
+                <TextField label={t('fields.notes_optional', 'Notater (valgfritt)')} value={quickNotes} onChange={(e) => setQuickNotes(e.target.value)} multiline minRows={2} fullWidth />
+                <Button 
+                  variant="contained" 
+                  onClick={handleQuickStamp}
+                  size="large"
+                  sx={{ py: 1.5 }}
+                  aria-label={t('aria.stamp_in', 'Stemple inn')}
+                  title={t('tooltips.stamp_in', 'Stemple inn')}
+                >
+                  {t('home.stamp_in', 'Stemple INN')}
                 </Button>
+                <Stack direction="row" spacing={1} flexWrap="wrap">
+                  {templates.map((t) => (
+                    <Chip 
+                      key={t.id}
+                      label={t.label} 
+                      size="small" 
+                      onClick={() => {
+                        setQuickActivity(t.activity);
+                        setQuickTitle(t.title || '');
+                        setQuickProject(t.project || '');
+                        setQuickPlace(t.place || '');
+                      }}
+                      clickable
+                      aria-label={`${t('aria.use_template', 'Bruk mal')}: ${t.label}`}
+                    />
+                  ))}
+                </Stack>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} lg={4} ref={manualRef}>
+          <Card>
+            <CardHeader title={t('home.add_manual', 'Legg til manuelt')} />
+            <CardContent>
+              <Stack spacing={2}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <TextField type="date" label={t('fields.date', 'Dato')} InputLabelProps={{ shrink: true }} value={date} onChange={(e) => setDate(e.target.value)} sx={{ flex: 1 }} />
+                  <Chip label={t('fields.today', 'I dag')} size="small" onClick={() => setDate(dayjs().format("YYYY-MM-DD"))} />
+                  <Chip label={t('fields.yesterday', 'I går')} size="small" onClick={() => setDate(dayjs().subtract(1, 'day').format("YYYY-MM-DD"))} />
+                </Stack>
+                <Button 
+                  variant="outlined" 
+                  size="small" 
+                  onClick={() => {
+                    const lastEntry = logs.find(l => dayjs(l.date).isBefore(dayjs()));
+                    if (lastEntry) {
+                      setManualActivity(lastEntry.activity as any);
+                      setStart(lastEntry.start_time?.slice(0,5) || "");
+                      setEnd(lastEntry.end_time?.slice(0,5) || "");
+                      setBreakHours(Number(lastEntry.break_hours || 0));
+                      setManualTitle(lastEntry.title || "");
+                      setManualProject(lastEntry.project || "");
+                      setManualPlace(lastEntry.place || "");
+                      showToast(t('home.copied_previous_row', 'Forrige rad kopiert'));
+                    } else {
+                      showToast(t('home.no_previous_rows', 'Ingen tidligere rader funnet'), "warning");
+                    }
+                  }}
+>
+                  {t('home.copy_previous_row', 'Kopier forrige rad')}
+                </Button>
+                <FormControl fullWidth>
+                  <InputLabel>{t('fields.activity', 'Aktivitet')}</InputLabel>
+                  <Select
+                    label={t('fields.activity', 'Aktivitet')}
+                    value={manualActivity}
+                    onChange={(e) => setManualActivity(e.target.value as any)}
+                  >
+                    <MenuItem value="Work">{t('stats.work', 'Arbeid')}</MenuItem>
+                    <MenuItem value="Meeting">{t('stats.meetings', 'Møte')}</MenuItem>
+                  </Select>
+                </FormControl>
+                <Stack direction="row" spacing={2}>
+                  <TextField type="time" label={t('fields.in', 'Inn')} InputLabelProps={{ shrink: true }} value={start} onChange={(e) => setStart(e.target.value)} fullWidth />
+                  <TextField 
+                    type="time" 
+                    label={t('fields.out', 'Ut')} 
+                    InputLabelProps={{ shrink: true }} 
+                    value={end} 
+                    onChange={(e) => setEnd(e.target.value)} 
+                    fullWidth 
+                    error={end < start && end !== "" && start !== ""}
+                    helperText={end < start && end !== "" && start !== "" ? t('helpers.out_after_in', 'Ut må være etter Inn') : ""}
+                  />
+                </Stack>
+                <TextField type="number" label={t('fields.break_hours', 'Pause (timer)')} value={breakHours} onChange={(e) => setBreakHours(Number(e.target.value))} fullWidth />
+                <TextField 
+                  type="number" 
+                  label={t('fields.expense_coverage', 'Utgiftsdekning (kr)')} 
+                  value={expenseCoverage} 
+                  onChange={(e) => setExpenseCoverage(Number(e.target.value) || 0)} 
+                  fullWidth 
+                  InputProps={{ inputProps: { min: 0, step: 10 } }}
+                  aria-label={t('fields.expense_coverage', 'Utgiftsdekning (kr)')}
+                />
+                <TextField label={t('fields.title_meeting', 'Tittel / Møte')} value={manualTitle} onChange={(e) => setManualTitle(e.target.value)} fullWidth />
+                <TextField label={t('fields.project_client', 'Prosjekt / Kunde')} value={manualProject} onChange={(e) => setManualProject(e.target.value)} fullWidth />
+                <TextField label={t('fields.place_mode', 'Sted / Modus')} value={manualPlace} onChange={(e) => setManualPlace(e.target.value)} fullWidth />
+                <TextField label={t('fields.notes', 'Notater')} value={manualNotes} onChange={(e) => setManualNotes(e.target.value)} multiline minRows={2} fullWidth />
+                <Button 
+                  variant="contained" 
+                  onClick={handleAddManual}
+                  size="large"
+                  sx={{ py: 1.5 }}
+                >
+                  {t('common.add', 'Legg til')}
+                </Button>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} lg={4} ref={statsRef}>
+          <Card>
+            <CardHeader title={t('home.month_metrics', 'Månedsfilter og nøkkeltall')} />
+            <CardContent>
+              <Stack spacing={2}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Button size="small" onClick={() => { const v = dayjs(monthNav+"01").subtract(1, "month").format("YYYYMM"); updateSettings({month_nav: v}); setMonthInput(v); }}>{"<"}</Button>
+                  <TextField
+                    label={t('fields.month', 'Måned')}
+                    value={monthInput}
+                    onChange={(e) => setMonthInput(e.target.value.replace(/[^0-9]/g, '').slice(0,6))}
+                    onBlur={() => { if (monthInput.length === 6) updateSettings({month_nav: monthInput}); }}
+                  />
+                  <Button size="small" onClick={() => { const v = dayjs(monthNav+"01").add(1, "month").format("YYYYMM"); updateSettings({month_nav: v}); setMonthInput(v); }}>{">"}</Button>
+                </Stack>
+                <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
+                  <Chip 
+                    label={t('filters.week', 'Uke')}
+                    size="small" 
+                    onClick={() => updateViewMode('week')}
+                    color={viewMode === 'week' ? "primary" : "default"}
+                    variant={viewMode === 'week' ? "filled" : "outlined"}
+                  />
+                  <Chip 
+                    label={t('filters.month', 'Måned')}
+                    size="small" 
+                    onClick={() => updateViewMode('month')}
+                    color={viewMode === 'month' ? "primary" : "default"}
+                    variant={viewMode === 'month' ? "filled" : "outlined"}
+                  />
+                  <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+                  <Chip 
+                    label={t('filters.this_month', 'Denne måneden')} 
+                    size="small" 
+                    onClick={() => {
+                      updateViewMode('month');
+                      const v = dayjs().format("YYYYMM");
+                      setMonthInput(v);
+                      updateSettings({month_nav: v});
+                    }}
+                    color={monthNav === dayjs().format("YYYYMM") ? "primary" : "default"}
+                  />
+                  <Chip 
+                    label={t('filters.prev_month', 'Forrige måned')} 
+                    size="small" 
+                    onClick={() => {
+                      updateViewMode('month');
+                      const v = dayjs().subtract(1, "month").format("YYYYMM");
+                      setMonthInput(v);
+                      updateSettings({month_nav: v});
+                    }}
+                    color={monthNav === dayjs().subtract(1, "month").format("YYYYMM") ? "primary" : "default"}
+                  />
+                  <Chip 
+                    label={t('filters.this_year', 'Dette året')} 
+                    size="small" 
+                    onClick={() => {
+                      updateViewMode('month');
+                      const v = dayjs().startOf("year").format("YYYYMM");
+                      setMonthInput(v);
+                      updateSettings({month_nav: v});
+                    }}
+                  />
+                </Stack>
+                <Divider />
+                <Typography variant="body2">{t('stats.total_hours_weekdays', 'Totale timer (man–fre)')}</Typography>
+                <Typography variant="h4">{totalHours.toFixed(2)}</Typography>
+                <Stack direction="row" spacing={2}>
+                  <Box>
+                    <Typography variant="body2">{t('stats.work', 'Arbeid')}</Typography>
+                    <Typography variant="h6">{logs.filter(l => l.activity === "Work").length}</Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="body2">{t('stats.meetings', 'Møter')}</Typography>
+                    <Typography variant="h6">{logs.filter(l => l.activity === "Meeting").length}</Typography>
+                  </Box>
+                </Stack>
+                <Divider />
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Chip
+                    label={paidBreakLocal ? t('home.paid_break', 'Betalt pause') : t('home.unpaid_break', 'Ubetalt pause')}
+                    onClick={() => {
+                      const next = !paidBreakLocal;
+                      setPaidBreakLocal(next);
+                      updateSettings({ paid_break: next });
+                    }}
+                  />
+                  <Typography variant="caption" color="text.secondary">Ved betalt pause trekkes ikke pause fra timene.</Typography>
+                </Stack>
+                <TextField
+                  label={t('fields.hourly_rate', 'Timesats (kr/t)')}
+                  value={rateInput}
+                  inputMode="decimal"
+                  onChange={(e) => {
+                    const v = sanitizeRateInput(e.target.value);
+                    setRateInput(v);
+                  }}
+                  onBlur={() => {
+                    const n = parseRate(rateInput);
+                    if (Number.isFinite(n)) {
+                      updateSettings({ hourly_rate: n });
+                      setRateInput(formatRate(n));
+                    } else {
+                      setRateInput(formatRate(rate));
+                    }
+                  }}
+                />
+                <Typography variant="body2">{t('stats.estimated_salary', 'Estimert lønn (man–fre)')}</Typography>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  {calcBusy && <CircularProgress size={16} />}
+                  <Typography variant="h5">{formatCurrency(rateForCalc * totalHours)}</Typography>
+                </Stack>
+                <Typography variant="body2">{t('stats.expenses', 'Utgiftsdekning')}</Typography>
+                <Typography variant="h6">{formatCurrency(totalExpenses)}</Typography>
+                <Typography variant="body2">{t('stats.total_payout', 'Total utbetaling')}</Typography>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  {calcBusy && <CircularProgress size={16} />}
+                  <Typography variant="h5" color="primary">{formatCurrency(rateForCalc * totalHours + totalExpenses)}</Typography>
+                </Stack>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
+                  <FormControl sx={{ minWidth: 160 }}>
+                    <InputLabel>{t('fields.tax_percent', 'Skatteprosent')}</InputLabel>
+                    <Select
+                      label={t('fields.tax_percent', 'Skatteprosent')}
+                      value={String(taxPctLocal)}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        setTaxPctLocal(Number.isFinite(v) ? v : 35);
+                        updateSettings({ tax_pct: Number.isFinite(v) ? v : 35 });
+                        showToast(t('settings.saved_all', 'Alle innstillinger lagret'));
+                      }}
+                    >
+                      {[20,25,30,35,40,45,50].map(p => (
+                        <MenuItem key={p} value={String(p)}>{p}%</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <Box>
+                    <Typography variant="body2">{t('stats.set_aside_tax', 'Sett av til skatt')}</Typography>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      {calcBusy && <CircularProgress size={14} />}
+                      <Typography variant="h6">{formatCurrency(rateForCalc * totalHours * (taxPctLocal/100))}</Typography>
+                    </Stack>
+                  </Box>
+                </Stack>
+                <Divider />
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                  <Button variant="outlined" color="warning" onClick={async () => { await deleteLogsMonth(dayjs().format("YYYYMM")); showToast(t('home.month_reset', 'Denne måneden nullstilt'), "success"); await mutate(); }}>{t('actions.reset_month', 'Nullstill denne måneden')}</Button>
+                  <Button variant="outlined" onClick={async ()=>{ await archiveMonth(monthNav); showToast(t('home.month_archived', 'Måneden er arkivert'), 'success'); await mutate(); }}>{t('actions.archive_month', 'Arkiver denne måneden')}</Button>
+<Button variant="outlined" color="error" onClick={async () => { await deleteLogsAll(); showToast(t('home.dataset_reset', 'Hele datasettet er nullstilt'), "success"); await mutate(); }}>{t('actions.reset_all', 'Nullstill hele datasettet')}</Button>
+                </Stack>
               </Stack>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {/* Nøkkeltall (Dialog) */}
-      <Dialog open={statsOpen} onClose={() => setStatsOpen(false)} fullWidth maxWidth="md">
-        <DialogTitle>Månedsfilter og nøkkeltall</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Button size="small" onClick={() => { const next = dayjs(monthNavLocal+"01").subtract(1, "month").format("YYYYMM"); setMonthNavLocal(next); updateSettings({ month_nav: next }); }}>{"<"}</Button>
-              <TextField 
-                type="month"
-                label="Måned"
-                InputLabelProps={{ shrink: true }}
-                value={dayjs(monthNavLocal + '01').format('YYYY-MM')}
-                onChange={(e) => {
-                  const val = (e.target.value || '').replace(/[^0-9-]/g, '');
-                  const yyyymm = val.replace('-', '').slice(0,6);
-                  if (yyyymm.length === 6) { setMonthNavLocal(yyyymm); updateSettings({ month_nav: yyyymm }); }
-                }}
-              />
-              <Button size="small" onClick={() => { const next = dayjs(monthNavLocal+"01").add(1, "month").format("YYYYMM"); setMonthNavLocal(next); updateSettings({ month_nav: next }); }}>{">"}</Button>
-            </Stack>
-            <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
-              <Chip 
-                label="Uke"
-                size="small" 
-                onClick={() => updateViewMode('week')}
-                color={viewMode === 'week' ? "primary" : "default"}
-                variant={viewMode === 'week' ? "filled" : "outlined"}
-              />
-              <Chip 
-                label="Måned"
-                size="small" 
-                onClick={() => updateViewMode('month')}
-                color={viewMode === 'month' ? "primary" : "default"}
-                variant={viewMode === 'month' ? "filled" : "outlined"}
-              />
-              <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
-              <Chip 
-                label="Denne måneden" 
-                size="small" 
-                onClick={() => { updateViewMode('month'); const cur = dayjs().format("YYYYMM"); setMonthNavLocal(cur); updateSettings({month_nav: cur}); }}
-                color={monthNavLocal === dayjs().format("YYYYMM") ? "primary" : "default"}
-              />
-              <Chip 
-                label="Forrige måned" 
-                size="small" 
-                onClick={() => { updateViewMode('month'); const prev = dayjs().subtract(1, "month").format("YYYYMM"); setMonthNavLocal(prev); updateSettings({month_nav: prev}); }}
-                color={monthNavLocal === dayjs().subtract(1, "month").format("YYYYMM") ? "primary" : "default"}
-              />
-              <Chip 
-                label="Dette året" 
-                size="small" 
-                onClick={() => { updateViewMode('month'); const start = dayjs().startOf("year").format("YYYYMM"); setMonthNavLocal(start); updateSettings({month_nav: start}); }}
-              />
-            </Stack>
-            <Divider />
-            <Typography variant="body2">Totale timer (man–fre)</Typography>
-            <Typography variant="h4">{totalHours.toFixed(2)}</Typography>
-            <Stack direction="row" spacing={2}>
-              <Box>
-                <Typography variant="body2">Arbeid</Typography>
-                <Typography variant="h6">{logs.filter(l => l.activity === "Work").length}</Typography>
-              </Box>
-              <Box>
-                <Typography variant="body2">Møter</Typography>
-                <Typography variant="h6">{logs.filter(l => l.activity === "Meeting").length}</Typography>
-              </Box>
-            </Stack>
-            <Divider />
-            <Stack direction="row" spacing={2} alignItems="center">
-              <Chip label={paidBreak ? "Betalt pause" : "Ubetalt pause"} onClick={() => updateSettings({paid_break: !paidBreak})} />
-              <Typography variant="caption" color="text.secondary">Ved betalt pause trekkes ikke pause fra timene.</Typography>
-            </Stack>
-            <TextField
-              label="Timesats (kr/t)"
-              value={rateInput}
-              inputMode="decimal"
-              onChange={(e) => {
-                const v = sanitizeRateInput(e.target.value);
-                setRateInput(v);
-                const n = parseRate(v);
-                if (!isNaN(n)) updateSettings({ hourly_rate: n });
-              }}
-              onBlur={() => setRateInput(formatRate(rate))}
-            />
-            <Typography variant="body2">Estimert lønn (man–fre)</Typography>
-            <Stack direction="row" spacing={1} alignItems="center">
-              {showCalcSkeleton ? (
-                <Skeleton variant="text" width={140} height={32} />
-              ) : (
-                <Typography variant="h5">{(rate * totalHours).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
-              )}
-            </Stack>
-            <Typography variant="body2">Utgiftsdekning</Typography>
-            <Typography variant="h6">{totalExpenses.toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
-            <TextField 
-              label="Ekstra utgifter (kr)"
-              value={extraExpensesInput}
-              inputMode="decimal"
-              onChange={(e) => setExtraExpensesInput(sanitizeRateInput(e.target.value))}
-              onBlur={() => {
-                const n = parseRate(extraExpensesInput);
-                if (!isNaN(n)) setExtraExpensesInput(formatRate(n));
-              }}
-            />
-            <Typography variant="body2">Total utbetaling</Typography>
-            <Stack direction="row" spacing={1} alignItems="center">
-              {showCalcSkeleton ? (
-                <Skeleton variant="text" width={180} height={32} />
-              ) : (
-                <Typography variant="h5" color="primary">{(rate * totalHours + totalExpenses + extraExpenses).toLocaleString("no-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 })}</Typography>
-              )}
-            </Stack>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <Button variant="outlined" color="info" startIcon={<Inventory2Icon />} onClick={handleArchiveMonth}>Arkiver denne måneden</Button>
-              <Button variant="outlined" color="warning" onClick={async () => { await deleteLogsMonth(dayjs().format("YYYYMM")); showToast("Denne måneden nullstilt", "success"); await mutate(); }}>Nullstill denne måneden</Button>
-              <Button variant="outlined" color="error" onClick={async () => { if (confirm("Sikker på at du vil slette hele datasettet?")) { await deleteLogsAll(); showToast("Hele datasettet er nullstilt", "success"); await mutate(); } }}>Nullstill hele datasettet</Button>
-            </Stack>
-          </Stack>
-        </DialogContent>
-      </Dialog>
-
       <Grid container spacing={2} sx={{ mt: 1 }}>
         <Grid item xs={12}>
-          <Card>
-            <CardHeader title="Send inn timeliste" />
-            <CardContent>
-              <SendTimesheet month={monthNavLocal} onToast={showToast} settings={settings} updateSettings={updateSettings} />
-            </CardContent>
-          </Card>
+          <LazyMount>
+            <TemplateManager
+              templates={templates}
+              onCreate={createTemplate}
+              onDelete={deleteTemplate}
+              onToast={showToast}
+            />
+          </LazyMount>
+        </Grid>
+        <Grid item xs={12} ref={importRef}>
+          <LazyMount>
+            <Card>
+              <CardHeader title={t('home.files_import', 'Importer timeplan (CSV)')} />
+              <CardContent>
+                <CsvImport onImported={async () => { await mutate(); }} onToast={showToast} />
+              </CardContent>
+            </Card>
+          </LazyMount>
         </Grid>
         <Grid item xs={12}>
-          <Card>
-            <CardHeader title="Skriv en rapport for måneden" />
-            <CardContent>
-              <ReportGenerator month={monthNavLocal} onToast={showToast} />
-            </CardContent>
-          </Card>
+          <LazyMount>
+            <Card>
+              <CardHeader title={t('home.google_sheets_webhook', 'Google Sheets Webhook (toveis)')} />
+              <CardContent>
+                <WebhookSection onImported={async () => { await mutate(); }} onToast={showToast} settings={settings} updateSettings={updateSettings} />
+              </CardContent>
+            </Card>
+          </LazyMount>
+        </Grid>
+        <Grid item xs={12}>
+          <LazyMount>
+            <Card>
+              <CardHeader title={t('home.add_workdays_month', 'Legg inn hverdager for måned')} />
+              <CardContent>
+                <MonthBulk onDone={async () => { await mutate(); }} onToast={showToast} />
+              </CardContent>
+            </Card>
+          </LazyMount>
+        </Grid>
+        <Grid item xs={12}>
+          <LazyMount>
+            <Card>
+              <CardHeader title={t('home.send_timesheet', 'Send inn timeliste')} />
+              <CardContent>
+                <SendTimesheet month={monthNav} onToast={showToast} settings={settings} updateSettings={updateSettings} />
+              </CardContent>
+            </Card>
+          </LazyMount>
+        </Grid>
+        <Grid item xs={12}>
+          <LazyMount>
+            <Card>
+              <CardHeader title={t('home.report_month', 'Skriv en rapport for måneden')} />
+              <CardContent>
+                <ReportGenerator month={monthNav} onToast={showToast} />
+              </CardContent>
+            </Card>
+          </LazyMount>
         </Grid>
       </Grid>
 
-      <Box mt={3} ref={logsRef}>
-        <Card>
+      <LazyMount>
+        <Box mt={3} ref={logsRef}>
+          <Card>
           <CardHeader 
-            title={`Logg for ${formatMonthLabel(monthNavLocal)}`}
+            title={`Logg for ${formatMonthLabel(monthNav)}`}
             action={
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Stack direction="row" spacing={0.5} alignItems="center">
-                  <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>Vis arkiverte</Typography>
-                  <input 
-                    type="checkbox" 
-                    checked={showArchived} 
-                    onChange={(e) => setShowArchived(e.target.checked)}
-                    style={{ cursor: 'pointer', width: 18, height: 18 }}
-                  />
-                </Stack>
+              <Stack direction="row" spacing={1}>
                 {bulkMode && selectedIds.size > 0 && (
                   <Button 
                     variant="contained" 
                     color="error"
                     size="small" 
                     onClick={handleBulkDelete}
-                  >
-                    Slett {selectedIds.size}
+>
+                    {t('common.delete', 'Slett')} {selectedIds.size}
                   </Button>
                 )}
                 <Button 
@@ -2091,23 +2030,39 @@ export default function Home() {
                     setSelectedIds(new Set());
                   }}
                 >
-                  {bulkMode ? 'Avbryt' : 'Velg flere'}
+                  {bulkMode ? t('home.cancel', 'Avbryt') : t('home.select_many', 'Velg flere')}
                 </Button>
                 <Button 
                   variant="outlined" 
                   size="small" 
-                  onClick={() => exportToPDF(allLogs, monthNavLocal, projectInfo, settings)}
+                  onClick={() => exportToPDF(allLogs, monthNav, projectInfo, settings)}
                   disabled={allLogs.length === 0}
+                  title={t('tooltips.export_pdf', 'Eksporter PDF')}
+                  aria-label={t('tooltips.export_pdf', 'Eksporter PDF')}
                 >
-                  Eksporter PDF
+                  {t('home.export_pdf', 'Eksporter PDF')}
                 </Button>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: 1 }}>
+                  <Typography variant="caption">{t('home.show_archived', 'Vis arkiverte')}</Typography>
+                  <Switch
+                    size="small"
+                    checked={showArchivedLocal}
+                    onChange={(e)=>{
+                      const v = e.target.checked;
+                      setShowArchivedLocal(v);
+                      try { if (typeof window !== 'undefined') localStorage.setItem('show_archived', String(v)); } catch { void 0; }
+updateSettings({ show_archived: v }).catch(() => void 0);
+                      setSize(1);
+                    }}
+                  />
+                </Stack>
               </Stack>
             }
           />
           <CardContent>
             <Stack direction="row" spacing={2} sx={{ mb: 2 }} alignItems="center">
               <TextField 
-                placeholder="Søk i logger (tittel, prosjekt, sted, notater, aktivitet)..."
+                placeholder={t('home.search_placeholder', 'Søk i logger (tittel, prosjekt, sted, notater, aktivitet)...')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 fullWidth
@@ -2115,152 +2070,227 @@ export default function Home() {
               />
               {bulkMode && (
                 <Stack direction="row" spacing={1}>
-                  <Button size="small" onClick={selectAll}>Velg alle</Button>
-                  <Button size="small" onClick={deselectAll}>Fjern alle</Button>
+                  <Button size="small" onClick={selectAll}>{t('common.select_all', 'Velg alle')}</Button>
+                  <Button size="small" onClick={deselectAll}>{t('common.clear_all', 'Fjern alle')}</Button>
                 </Stack>
               )}
             </Stack>
-            <div style={{ height: 360, overflow: 'auto' }} ref={parentRef}>
-              <Table size="small" sx={{ minWidth: 900 }}>
-                <TableHead sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: 'background.paper' }}>
-                <TableRow>
-                  {bulkMode && <TableCell padding="checkbox" />}
-                  <TableCell sx={{ width: 64 }}>Dag</TableCell>
-                  <TableCell sx={{ width: 80 }}>Dato</TableCell>
-                  <TableCell sx={{ width: 84 }}>Inn</TableCell>
-                  <TableCell sx={{ width: 84 }}>Ut</TableCell>
-                  <TableCell sx={{ width: 72 }}>Pause</TableCell>
-                  <TableCell sx={{ width: 100 }}>Aktivitet</TableCell>
-                  <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Tittel</TableCell>
-                  <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Prosjekt</TableCell>
-                  <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Sted</TableCell>
-                  <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Notater</TableCell>
-                  <TableCell align="right" sx={{ width: 80 }}>Utgifter</TableCell>
-                  <TableCell align="right" sx={{ width: { xs: 56, md: 140 } }}>Handlinger</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
-                  {rowVirtualizer.getVirtualItems().map((vi) => {
-                    const r = logs[vi.index];
-                    return (
-                      <div key={r.id} style={{ position: 'absolute', top: vi.start, left: 0, right: 0 }}>
-                        <TableRow hover sx={{ bgcolor: vi.index % 2 ? 'action.hover' : undefined }}>
-                          {bulkMode && editingId !== r.id && (
-                            <TableCell padding="checkbox">
-                              <input 
-                                type="checkbox" 
-                                checked={selectedIds.has(r.id)} 
-                                onChange={() => toggleSelection(r.id)}
-                                style={{ cursor: 'pointer' }}
-                              />
-                            </TableCell>
-                          )}
-                          {editingId === r.id ? (
-                            <>
-                              {bulkMode && <TableCell />}
-                              <TableCell>{weekdayShort(editForm.date)}</TableCell>
-                              <TableCell><TextField type="date" value={editForm.date} onChange={(e)=>setEditForm({...editForm, date: e.target.value})} size="small" /></TableCell>
-                              <TableCell><TextField type="time" value={editForm.start} onChange={(e)=>setEditForm({...editForm, start: e.target.value})} size="small" sx={{ maxWidth: 96 }} /></TableCell>
-                              <TableCell><TextField type="time" value={editForm.end} onChange={(e)=>setEditForm({...editForm, end: e.target.value})} size="small" sx={{ maxWidth: 96 }} /></TableCell>
-                              <TableCell><TextField type="number" value={editForm.breakHours} onChange={(e)=>setEditForm({...editForm, breakHours: Number(e.target.value)})} size="small" sx={{ maxWidth: 96 }} /></TableCell>
-                              <TableCell>
-                                <FormControl size="small" fullWidth>
-                                  <Select value={editForm.activity} onChange={(e)=>setEditForm({...editForm, activity: e.target.value})}>
-                                    <MenuItem value="Work">Arbeid</MenuItem>
-                                    <MenuItem value="Meeting">Møte</MenuItem>
-                                  </Select>
-                                </FormControl>
-                              </TableCell>
-                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}><TextField value={editForm.title} onChange={(e)=>setEditForm({...editForm, title: e.target.value})} size="small" /></TableCell>
-                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}><TextField value={editForm.project} onChange={(e)=>setEditForm({...editForm, project: e.target.value})} size="small" /></TableCell>
-                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}><TextField value={editForm.place} onChange={(e)=>setEditForm({...editForm, place: e.target.value})} size="small" /></TableCell>
-                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}><TextField value={editForm.notes} onChange={(e)=>setEditForm({...editForm, notes: e.target.value})} size="small" /></TableCell>
-                              <TableCell align="right"><TextField type="number" value={editForm.expenseCoverage} onChange={(e)=>setEditForm({...editForm, expenseCoverage: Number(e.target.value)||0})} size="small" InputProps={{inputProps:{min:0}}} sx={{ maxWidth: 110 }} /></TableCell>
-                              <TableCell align="right">
-                                <IconButton aria-label="Lagre endringer" size="small" onClick={() => saveEdit(r.id, r)}><SaveIcon fontSize="small" /></IconButton>
-                                <IconButton aria-label="Avbryt redigering" size="small" onClick={() => cancelEdit()}><CloseIcon fontSize="small" /></IconButton>
-                              </TableCell>
-                            </>
-                          ) : (
-                            <>
-                              <TableCell>{weekdayShort(r.date)}</TableCell>
-                              <TableCell>{dayjs(r.date).format('DD.MM')}</TableCell>
-                              <TableCell>{r.start_time?.slice(0,5)}</TableCell>
-                              <TableCell>{r.end_time?.slice(0,5)}</TableCell>
-                              <TableCell>{r.break_hours}</TableCell>
-                              <TableCell>
-                                <Chip label={r.activity === 'Work' ? 'Arbeid' : 'Møte'} size="small" color={r.activity === 'Work' ? 'primary' : 'secondary'} />
-                              </TableCell>
-                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}>
-                                <Typography noWrap title={r.title || ''}>{r.title}</Typography>
-                              </TableCell>
-                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}>
-                                <Typography noWrap title={r.project || ''}>{r.project}</Typography>
-                              </TableCell>
-                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}>
-                                <Typography noWrap title={r.place || ''}>{r.place}</Typography>
-                              </TableCell>
-                              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }}}>
-                                <Typography noWrap title={r.notes || ''}>{r.notes}</Typography>
-                              </TableCell>
-                              <TableCell align="right">{r.expense_coverage ? `${Number(r.expense_coverage).toLocaleString('no-NO')} kr` : '—'}</TableCell>
-                              <TableCell align="right">
-                                {isMdDown ? (
-                                  <IconButton aria-label="Mer" size="small" onClick={(e) => openActions(e, r)}>
-                                    <MoreVertIcon fontSize="small" />
-                                  </IconButton>
-                                ) : (
-                                  <>
-                                    <IconButton aria-label="Rediger rad" size="small" onClick={() => startEdit(r)}><EditIcon fontSize="small" /></IconButton>
-                                    {r.is_archived ? (
-                                      <IconButton aria-label="Gjenopprett fra arkiv" size="small" onClick={() => handleUnarchive(r)}>
-                                        <UnarchiveIcon fontSize="small" />
-                                      </IconButton>
-                                    ) : (
-                                      <IconButton aria-label="Arkiver rad" size="small" onClick={() => handleArchive(r)}>
-                                        <ArchiveIcon fontSize="small" />
-                                      </IconButton>
-                                    )}
-                                    <IconButton aria-label="Slett rad" size="small" onClick={() => handleDelete(r)}>
-                                      <DeleteIcon fontSize="small" />
-                                    </IconButton>
-                                  </>
-                                )}
-                              </TableCell>
-                            </>
-                          )}
-                        </TableRow>
-                      </div>
-                    );
-                  })}
-                </div>
-                {!isLoading && logs.length === 0 && (
+            <Box sx={{ height: 500, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+              <TableVirtuoso
+                data={logs}
+                style={{ height: '100%' }}
+                components={{
+                  Table: (props) => <Table {...props} size="small" sx={{ minWidth: 900 }} />,
+                  TableHead: TableHead,
+                  TableRow: TableRow,
+                  TableBody: forwardRef<HTMLTableSectionElement>((props, ref) => <TableBody {...props} ref={ref} />),
+                }}
+                fixedHeaderContent={() => (
                   <TableRow>
-                    <TableCell colSpan={12}>
-                      <Typography variant="body2">Ingen rader i denne måneden enda.</Typography>
-                    </TableCell>
+                    {bulkMode && <TableCell padding="checkbox" sx={{ bgcolor: 'background.paper' }} />}
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>{t('table.date', 'Dato')}</TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>{t('table.in', 'Inn')}</TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>{t('table.out', 'Ut')}</TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>{t('table.break', 'Pause')}</TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>{t('table.activity', 'Aktivitet')}</TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>{t('table.title', 'Tittel')}</TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>{t('table.project', 'Prosjekt')}</TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>{t('table.place', 'Sted')}</TableCell>
+                    <TableCell sx={{ bgcolor: 'background.paper' }}>{t('table.notes', 'Notater')}</TableCell>
+                    <TableCell align="right" sx={{ bgcolor: 'background.paper' }}>{t('table.expenses', 'Utgifter')}</TableCell>
+                    <TableCell align="right" sx={{ bgcolor: 'background.paper' }}>{t('table.actions', 'Handlinger')}</TableCell>
                   </TableRow>
                 )}
-              </TableBody>
-              </Table>
-            </div>
+                itemContent={(index, r) => (
+                  <>
+                    {bulkMode && editingId !== r.id && (
+                      <TableCell padding="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(r.id)}
+                          onChange={() => toggleSelection(r.id)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                      </TableCell>
+                    )}
+                    {editingId === r.id ? (
+                      <>
+                        {bulkMode && <TableCell />}
+                        <TableCell sx={{ minWidth: 140 }}>
+                          <TextField
+                            type="date"
+                            value={editForm.date}
+                            onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                            size="small"
+                            fullWidth
+                            InputLabelProps={{ shrink: true }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 100 }}>
+                          <TextField
+                            type="time"
+                            value={editForm.start}
+                            onChange={(e) => setEditForm({ ...editForm, start: e.target.value })}
+                            size="small"
+                            fullWidth
+                            InputLabelProps={{ shrink: true }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 100 }}>
+                          <TextField
+                            type="time"
+                            value={editForm.end}
+                            onChange={(e) => setEditForm({ ...editForm, end: e.target.value })}
+                            size="small"
+                            fullWidth
+                            InputLabelProps={{ shrink: true }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 80 }}>
+                          <TextField
+                            type="number"
+                            value={editForm.breakHours}
+                            onChange={(e) => setEditForm({ ...editForm, breakHours: Number(e.target.value) })}
+                            size="small"
+                            fullWidth
+                            inputProps={{ step: 0.25, min: 0 }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 120 }}>
+                          <FormControl size="small" fullWidth>
+                            <Select value={editForm.activity} onChange={(e) => setEditForm({ ...editForm, activity: e.target.value })}>
+                              <MenuItem value="Work">{t('stats.work', 'Arbeid')}</MenuItem>
+                              <MenuItem value="Meeting">{t('stats.meetings', 'Møte')}</MenuItem>
+                            </Select>
+                          </FormControl>
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 150 }}>
+                          <TextField
+                            value={editForm.title}
+                            onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                            size="small"
+                            fullWidth
+                            placeholder={t('table.title', 'Tittel')}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 130 }}>
+                          <TextField
+                            value={editForm.project}
+                            onChange={(e) => setEditForm({ ...editForm, project: e.target.value })}
+                            size="small"
+                            fullWidth
+                            placeholder={t('table.project', 'Prosjekt')}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 120 }}>
+                          <TextField
+                            value={editForm.place}
+                            onChange={(e) => setEditForm({ ...editForm, place: e.target.value })}
+                            size="small"
+                            fullWidth
+                            placeholder={t('table.place', 'Sted')}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 150 }}>
+                          <TextField
+                            value={editForm.notes}
+                            onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                            size="small"
+                            fullWidth
+                            placeholder={t('table.notes', 'Notater')}
+                            multiline
+                            maxRows={2}
+                          />
+                        </TableCell>
+                        <TableCell align="right" sx={{ minWidth: 100 }}>
+                          <TextField
+                            type="number"
+                            value={editForm.expenseCoverage}
+                            onChange={(e) => setEditForm({ ...editForm, expenseCoverage: Number(e.target.value) || 0 })}
+                            size="small"
+                            fullWidth
+                            InputProps={{ inputProps: { min: 0, step: 10 } }}
+                            placeholder="0"
+                          />
+                        </TableCell>
+                        <TableCell align="right" sx={{ minWidth: 100 }}>
+                          <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                            <IconButton
+                              aria-label={t('aria.save_changes', 'Lagre endringer')}
+                              size="small"
+                              onClick={() => saveEdit(r.id, r)}
+                              color="primary"
+                            >
+                              <SaveIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                              aria-label={t('aria.cancel_edit', 'Avbryt redigering')}
+                              size="small"
+                              onClick={() => cancelEdit()}
+                            >
+                              <CloseIcon fontSize="small" />
+                            </IconButton>
+                          </Stack>
+                        </TableCell>
+                      </>
+                    ) : (
+                      <>
+                        <TableCell>{r.date}</TableCell>
+                        <TableCell>{r.start_time?.slice(0, 5)}</TableCell>
+                        <TableCell>{r.end_time?.slice(0, 5)}</TableCell>
+                        <TableCell>{r.break_hours}</TableCell>
+                        <TableCell>{r.activity}</TableCell>
+                        <TableCell>{r.title}</TableCell>
+                        <TableCell>{r.project}</TableCell>
+                        <TableCell>{r.place}</TableCell>
+                        <TableCell>{r.notes}</TableCell>
+                        <TableCell align="right">{Number.isFinite(Number(r.expense_coverage)) && Number(r.expense_coverage) > 0 ? `${Number(r.expense_coverage).toLocaleString('no-NO')} kr` : '—'}</TableCell>
+                        <TableCell align="right">
+                          <IconButton aria-label={t('aria.edit_row', 'Rediger rad')} size="small" onClick={() => startEdit(r)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          {!showArchived ? (
+                            <IconButton
+                              aria-label={t('aria.archive_row', 'Arkiver rad')}
+                              size="small"
+                              onClick={async () => {
+                                await archiveLog(r.id);
+                                showToast(t('home.row_archived', 'Rad arkivert'), 'success');
+                                await mutate();
+                              }}
+                            >
+                              {/* using Delete icon color warning to differentiate */}
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          ) : (
+                            <IconButton
+                              aria-label={t('aria.restore_row', 'Gjenopprett rad')}
+                              size="small"
+                              onClick={async () => {
+                                await unarchiveLog(r.id);
+                                showToast(t('home.row_restored', 'Rad gjenopprettet'), 'success');
+                                await mutate();
+                              }}
+                            >
+                              <RestoreIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                        </TableCell>
+                      </>
+                    )}
+                  </>
+                )}
+              />
+              {!isLoading && logs.length === 0 && (
+                <Box sx={{ p: 3, textAlign: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">{t('home.no_rows_this_month', 'Ingen rader i denne måneden enda.')}</Typography>
+                </Box>
+              )}
+            </Box>
           </CardContent>
-        </Card>
-      </Box>
-
-      {/* Actions Menu (mobile) */}
-      <Menu anchorEl={actionAnchor} open={Boolean(actionAnchor)} onClose={closeActions} keepMounted>
-        <ActionsMenuItem onClick={() => { if (actionRow) startEdit(actionRow); closeActions(); }}>Rediger</ActionsMenuItem>
-        {actionRow?.is_archived ? (
-          <ActionsMenuItem onClick={async () => { if (actionRow) await handleUnarchive(actionRow); closeActions(); }}>Gjenopprett</ActionsMenuItem>
-        ) : (
-          <ActionsMenuItem onClick={async () => { if (actionRow) await handleArchive(actionRow); closeActions(); }}>Arkiver</ActionsMenuItem>
-        )}
-        <ActionsMenuItem onClick={async () => { if (actionRow) await handleDelete(actionRow); closeActions(); }}>
-          Slett
-        </ActionsMenuItem>
-      </Menu>
+          </Card>
+        </Box>
+      </LazyMount>
 
       {/* Mobile Bottom Navigation - Hidden on desktop */}
       <MobileBottomNav
@@ -2277,227 +2307,8 @@ export default function Home() {
         templates={templates}
         activeStamp={activeStamp}
         onStampIn={handleQuickStampFromFAB}
-        onStampInWithCase={handleQuickStampFromFAB}
         onStampOut={handleStampOutFromFAB}
       />
-
-      {/* Manuell registrering (Dialog) */}
-      <Dialog open={manualOpen} onClose={() => setManualOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Legg til manuelt</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <TextField type="date" label="Dato" InputLabelProps={{ shrink: true }} value={date} onChange={(e) => setDate(e.target.value)} sx={{ flex: 1 }} />
-              <Chip label="I dag" size="small" onClick={() => setDate(dayjs().format("YYYY-MM-DD"))} />
-              <Chip label="I går" size="small" onClick={() => setDate(dayjs().subtract(1, 'day').format("YYYY-MM-DD"))} />
-            </Stack>
-            <Button 
-              variant="outlined" 
-              size="small" 
-              onClick={() => {
-                const lastEntry = logs.find(l => dayjs(l.date).isBefore(dayjs()));
-                if (lastEntry) {
-                  setManualActivity(lastEntry.activity as any);
-                  setStart(lastEntry.start_time?.slice(0,5) || "");
-                  setEnd(lastEntry.end_time?.slice(0,5) || "");
-                  setBreakHours(Number(lastEntry.break_hours || 0));
-                  setManualTitle(lastEntry.title || "");
-                  setManualProject(lastEntry.project || "");
-                  setManualPlace(lastEntry.place || "");
-                  showToast("Forrige rad kopiert");
-                } else {
-                  showToast("Ingen tidligere rader funnet", "warning");
-                }
-              }}
-            >
-              Kopier forrige rad
-            </Button>
-            <FormControl fullWidth>
-              <InputLabel>Aktivitet</InputLabel>
-              <Select
-                label="Aktivitet"
-                value={manualActivity}
-                onChange={(e) => setManualActivity(e.target.value as any)}
-              >
-                <MenuItem value="Work">Arbeid</MenuItem>
-                <MenuItem value="Meeting">Møte</MenuItem>
-              </Select>
-            </FormControl>
-            <Stack direction="row" spacing={2}>
-              <TextField type="time" label="Inn" InputLabelProps={{ shrink: true }} value={start} onChange={(e) => setStart(e.target.value)} fullWidth />
-              <TextField 
-                type="time" 
-                label="Ut" 
-                InputLabelProps={{ shrink: true }} 
-                value={end} 
-                onChange={(e) => setEnd(e.target.value)} 
-                fullWidth 
-                error={end < start && end !== "" && start !== ""}
-                helperText={end < start && end !== "" && start !== "" ? "Ut må være etter Inn" : ""}
-              />
-            </Stack>
-            <TextField 
-              type="number" 
-              label="Pause (timer)" 
-              value={breakHours} 
-              onChange={(e) => setBreakHours(Number(e.target.value))} 
-              fullWidth 
-              error={breakHours < 0}
-              helperText={breakHours < 0 ? "Pause kan ikke være negativ" : ""}
-              InputProps={{ inputProps: { min: 0, step: 0.5 } }}
-            />
-            <TextField 
-              type="number" 
-              label="Utgiftsdekning (kr)" 
-              value={expenseCoverage} 
-              onChange={(e) => setExpenseCoverage(Number(e.target.value) || 0)} 
-              fullWidth 
-              InputProps={{ inputProps: { min: 0, step: 10 } }}
-              aria-label="Utgiftsdekning i kroner"
-            />
-            <TextField label="Tittel / Møte" value={manualTitle} onChange={(e) => setManualTitle(e.target.value)} fullWidth />
-            <TextField label="Prosjekt / Kunde" value={manualProject} onChange={(e) => setManualProject(e.target.value)} fullWidth />
-            <TextField label="Sted / Modus" value={manualPlace} onChange={(e) => setManualPlace(e.target.value)} fullWidth />
-            <TextField label="Notater" value={manualNotes} onChange={(e) => setManualNotes(e.target.value)} multiline minRows={2} fullWidth />
-            <Button 
-              variant="contained" 
-              onClick={async () => { await handleAddManual(); setManualOpen(false); }}
-              size="large"
-              sx={{ py: 1.5 }}
-            >
-              Legg til
-            </Button>
-          </Stack>
-        </DialogContent>
-      </Dialog>
-
-      {/* Avanserte verktøy (Dialog) */}
-      <Dialog open={advancedOpen} onClose={() => setAdvancedOpen(false)} fullWidth maxWidth="md">
-        <DialogTitle>Avanserte verktøy</DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={6}>
-              <Card>
-                <CardHeader title="Importer timeplan (CSV)" />
-                <CardContent>
-                  <CsvImport onImported={async () => { await mutate(); }} onToast={showToast} />
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <Card>
-                <CardHeader title="Google Sheets Webhook (toveis)" />
-                <CardContent>
-                  <WebhookSection onImported={async () => { await mutate(); }} onToast={showToast} settings={settings} updateSettings={updateSettings} monthNav={monthNavLocal} />
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-        </DialogContent>
-      </Dialog>
-
-      {/* Onboarding (first time) */}
-      <Dialog open={onboardingOpen} onClose={() => setOnboardingOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Velkommen til Smart Timing</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              Slik setter du opp din Smart Timing-løsning. Du kan endre dette senere i Innstillinger.
-            </Typography>
-
-            {canAddWeekends && (
-              <Alert severity="warning" sx={{ borderRadius: 2 }}>
-                <AlertTitle>Viktig informasjon for deg som er miljøarbeider</AlertTitle>
-                <Stack spacing={0.5} component="div">
-                  <Typography variant="body2"><strong>Ikke</strong> bruk navn eller detaljer som kan identifisere personer.</Typography>
-                  <Typography variant="body2">Bruk generelle betegnelser som «Gutten», «Jenta», «Brukeren», «Deltakeren».</Typography>
-                  <Typography variant="body2">Fokuser på aktiviteter og utvikling, ikke identitet. Anonymiser steder ved behov.</Typography>
-                  <Typography variant="caption" color="text.secondary">Dette sikrer GDPR‑etterlevelse og beskytter klientenes personvern.</Typography>
-                </Stack>
-              </Alert>
-            )}
-
-            <TextField
-              label={`Hvilken timesats har du avtalt med ${projectInfo?.bedrift || 'bedriften'}?`}
-              value={onbRateInput}
-              onChange={(e) => setOnbRateInput(e.target.value)}
-              onBlur={() => {
-                const n = parseRate(onbRateInput);
-                if (!isNaN(n)) setOnbRateInput(formatRate(n));
-              }}
-              inputMode="decimal"
-              placeholder="f.eks. 500,00"
-              fullWidth
-            />
-
-            <Box>
-              <Typography variant="subtitle2" gutterBottom>Hvordan er arbeidsdagen din?</Typography>
-              <FormGroup row>
-                {[1,2,3,4,5].map(d => (
-                  <FormControlLabel key={d} control={<Checkbox checked={!!onbDays[d]} onChange={(e) => setOnbDays({ ...onbDays, [d]: e.target.checked })} />} label={["Man","Tir","Ons","Tor","Fre"][d-1]} />
-                ))}
-                {canAddWeekends && (
-                  <>
-                    <FormControlLabel control={<Checkbox checked={!!onbDays[6]} onChange={(e) => setOnbDays({ ...onbDays, 6: e.target.checked })} />} label="Lør" />
-                    <FormControlLabel control={<Checkbox checked={!!onbDays[0]} onChange={(e) => setOnbDays({ ...onbDays, 0: e.target.checked })} />} label="Søn" />
-                  </>
-                )}
-              </FormGroup>
-              {canAddWeekends && (
-                <Typography variant="caption" color="text.secondary">Som miljøarbeider i bolig kan helger også legges til.</Typography>
-              )}
-            </Box>
-
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField type="time" label="Inn (klokkeslett)" InputLabelProps={{ shrink: true }} value={onbStart} onChange={(e) => setOnbStart(e.target.value)} fullWidth />
-              <TextField type="time" label="Ut (klokkeslett)" InputLabelProps={{ shrink: true }} value={onbEnd} onChange={(e) => setOnbEnd(e.target.value)} fullWidth />
-            </Stack>
-
-            <FormControlLabel
-              control={<Checkbox checked={onbApplyNow} onChange={(e) => setOnbApplyNow(e.target.checked)} />}
-              label="Ønsker du at alle valgte hverdager legges inn for denne måneden nå?"
-            />
-
-            <Stack direction="row" spacing={1}>
-              <Button onClick={async () => {
-                // Skip (mark done)
-                await updateSettings({ onboarding_done: true });
-                await mutateSettings();
-                setOnboardingOpen(false);
-              }}>Hopp over</Button>
-              <Button variant="contained" disabled={onbBusy} onClick={async () => {
-                setOnbBusy(true);
-                try {
-                  // Save settings in one call
-                  const n = parseRate(onbRateInput);
-                  const payload: any = { onboarding_done: true };
-                  if (!isNaN(n)) payload.hourly_rate = n;
-                  await updateSettings(payload);
-                  await mutateSettings();
-                  // Optionally insert weekdays
-                  if (onbApplyNow) {
-                    const base = dayjs(monthNavLocal + "01");
-                    const days = base.daysInMonth();
-                    const rows: any[] = [];
-                    for (let d = 1; d <= days; d++) {
-                      const dd = base.date(d);
-                      const dow = dd.day();
-                      if (onbDays[dow]) {
-                        rows.push({ date: dd.format('YYYY-MM-DD'), start: onbStart, end: onbEnd, breakHours: 0, activity: 'Work' });
-                      }
-                    }
-                    if (rows.length) await createLogsBulk(rows);
-                    await mutate();
-                  }
-                  setOnboardingOpen(false);
-                } finally {
-                  setOnbBusy(false);
-                }
-              }}>Fullfør</Button>
-            </Stack>
-          </Stack>
-        </DialogContent>
-      </Dialog>
     </Container>
   );
 }

@@ -1,127 +1,198 @@
-"use client";
+'use client';
 
 import React, { useEffect, useState } from 'react';
-import {
-  Box,
-  Typography,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  CircularProgress,
-  Alert,
-  Chip,
-} from '@mui/material';
+import { Box, Typography, TextField, Button, Dialog, DialogTitle, DialogContent, DialogActions, Chip } from '@mui/material';
+import { Add, Delete } from '@mui/icons-material';
+import { useSnackbar } from 'notistack';
+import { TableVirtuoso } from 'react-virtuoso';
 import { CompanyProvider, useCompany } from '../../../contexts/CompanyContext';
 import PortalLayout from '../../../components/PortalLayout';
+import { useTranslations } from '../../../contexts/TranslationsContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000';
 
 function CasesContent() {
+  const { t } = useTranslations();
   const { fetchWithAuth } = useCompany();
-  const [cases, setCases] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { enqueueSnackbar } = useSnackbar();
+  const [users, setUsers] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [newCaseId, setNewCaseId] = useState('');
+  const [newCaseNotes, setNewCaseNotes] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      setError('');
-      try {
-        // Fetch all users with their cases
-        const res = await fetchWithAuth(`${API_BASE}/api/company/users`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to load data');
+    loadUsers();
+  }, []);
 
-        // Build case list from user assignments
-        const caseMap = new Map<string, any>();
-        (data.users || []).forEach((user: any) => {
-          (user.cases || []).forEach((c: any) => {
-            if (!caseMap.has(c.case_id)) {
-              caseMap.set(c.case_id, {
-                case_id: c.case_id,
-                assignedUsers: [],
-                notes: c.notes,
-              });
-            }
-            caseMap.get(c.case_id).assignedUsers.push({
-              email: user.user_email,
-              role: user.role,
-              approved: user.approved,
-            });
-          });
-        });
+  const loadUsers = async () => {
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/api/company/users`);
+      const data = await res.json();
+      setUsers(data.users || []);
+    } catch (error) {
+      console.error('Failed to load users:', error);
+    }
+  };
 
-        setCases(Array.from(caseMap.values()).sort((a, b) => a.case_id.localeCompare(b.case_id)));
-      } catch (e: any) {
-        setError(e?.message || 'Failed to load cases');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [fetchWithAuth]);
+  const handleAddCase = async () => {
+    if (!newCaseId.trim() || !selectedUser) return;
+    setLoading(true);
+    try {
+      await fetchWithAuth(`${API_BASE}/api/company/users/${selectedUser.id}/cases`, {
+        method: 'POST',
+        body: JSON.stringify({ case_id: newCaseId.trim(), notes: newCaseNotes.trim() }),
+      });
+      await loadUsers();
+      enqueueSnackbar('Sak lagt til', { variant: 'success' });
+      setDialogOpen(false);
+      setNewCaseId('');
+      setNewCaseNotes('');
+    } catch (error: any) {
+      enqueueSnackbar(`Kunne ikke legge til sak: ${error?.message || error}`, { variant: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveCase = async (userId, caseRowId) => {
+    try {
+      await fetchWithAuth(`${API_BASE}/api/company/users/${userId}/cases/${caseRowId}`, {
+        method: 'DELETE',
+      });
+      await loadUsers();
+      enqueueSnackbar('Sak fjernet', { variant: 'success' });
+    } catch (error: any) {
+      enqueueSnackbar(`Kunne ikke fjerne sak: ${error?.message || error}`, { variant: 'error' });
+    }
+  };
+
+  const filteredUsers = users.filter(u =>
+    (u.user_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+     u.google_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+     u.cases?.some(c => c.case_id?.toLowerCase().includes(searchTerm.toLowerCase())))
+  );
+
+  const VirtuosoTableComponents = {
+    Scroller: React.forwardRef((props, ref) => (
+      <div {...props} ref={ref} style={{ overflowX: 'auto' }} />
+    )),
+    Table: (props) => <table {...props} style={{ borderCollapse: 'collapse', width: '100%' }} />,
+    TableHead: React.forwardRef((props, ref) => <thead {...props} ref={ref} />),
+    TableRow: (props) => <tr {...props} style={{ borderBottom: '1px solid #e0e0e0' }} />,
+    TableBody: React.forwardRef((props, ref) => <tbody {...props} ref={ref} />),
+  };
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>Cases</Typography>
-      <Typography variant="body2" color="text.secondary" gutterBottom>
-        All case numbers assigned across users. Manage case assignments in the Users page.
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4">{t('portal.cases.title', 'Saksadministrasjon')}</Typography>
+      </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
+      <TextField
+        fullWidth
+        placeholder={t('portal.cases.search_placeholder', 'Søk etter bruker eller saks-ID...')}
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        sx={{ mb: 2 }}
+      />
 
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress />
-        </Box>
-      ) : cases.length === 0 ? (
-        <Alert severity="info">No cases yet. Assign cases to users from the Users page.</Alert>
-      ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Case ID</TableCell>
-                <TableCell>Assigned Users</TableCell>
-                <TableCell>Notes</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {cases.map((c) => (
-                <TableRow key={c.case_id}>
-                  <TableCell>
-                    <Typography variant="body1" fontWeight={500}>{c.case_id}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    {c.assignedUsers.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary">—</Typography>
-                    ) : (
-                      c.assignedUsers.map((u: any, i: number) => (
-                        <Chip
-                          key={i}
-                          label={`${u.email} (${u.role})`}
-                          size="small"
-                          color={u.approved ? 'success' : 'warning'}
-                          sx={{ mr: 0.5, mb: 0.5 }}
-                        />
-                      ))
-                    )}
-                  </TableCell>
-                  <TableCell>{c.notes || '—'}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+      <Box sx={{ height: 600, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+        <TableVirtuoso
+          data={filteredUsers}
+          components={VirtuosoTableComponents}
+          fixedHeaderContent={() => (
+            <tr style={{ background: '#f5f5f5' }}>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>{t('portal.cases.user', 'Bruker')}</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>{t('table.google_email', 'Google-epost')}</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>{t('table.role', 'Rolle')}</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>{t('table.status', 'Status')}</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>{t('portal.cases.assigned_cases', 'Tildelte saker')}</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>{t('table.actions', 'Handlinger')}</th>
+            </tr>
+          )}
+          itemContent={(index, user) => (
+            <>
+              <td style={{ padding: '12px' }}>{user.user_email || '-'}</td>
+              <td style={{ padding: '12px' }}>{user.google_email || '-'}</td>
+              <td style={{ padding: '12px' }}>
+                <Chip label={user.role} size="small" />
+              </td>
+              <td style={{ padding: '12px' }}>
+                <Chip
+                  label={user.approved ? t('common.approved', 'Godkjent') : t('common.pending', 'Venter')}
+                  size="small"
+                  color={user.approved ? 'success' : 'warning'}
+                />
+              </td>
+              <td style={{ padding: '12px' }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {user.cases?.length > 0 ? (
+                    user.cases.map((c) => (
+                      <Chip
+                        key={c.id}
+                        label={c.case_id}
+                        size="small"
+                        onDelete={() => handleRemoveCase(user.id, c.id)}
+                        deleteIcon={<Delete />}
+                      />
+                    ))
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">{t('portal.cases.no_cases', 'Ingen saker')}</Typography>
+                  )}
+                </Box>
+              </td>
+              <td style={{ padding: '12px' }}>
+                <Button
+                  size="small"
+                  startIcon={<Add />}
+                  onClick={() => {
+                    setSelectedUser(user);
+                    setDialogOpen(true);
+                  }}
+>
+                  {t('portal.cases.add_case', 'Legg til sak')}
+                </Button>
+              </td>
+            </>
+          )}
+        />
+      </Box>
+
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>{t('portal.cases.add_case_for', 'Legg til sak for')} {selectedUser?.user_email}</DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth
+            label={t('fields.case_id', 'Saks-ID')}
+            value={newCaseId}
+            onChange={(e) => setNewCaseId(e.target.value)}
+            sx={{ mt: 2, mb: 2 }}
+            required
+          />
+          <TextField
+            fullWidth
+            label={t('fields.notes_optional', 'Notater (valgfritt)')}
+            value={newCaseNotes}
+            onChange={(e) => setNewCaseNotes(e.target.value)}
+            multiline
+            rows={3}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)}>{t('common.cancel', 'Avbryt')}</Button>
+          <Button onClick={handleAddCase} variant="contained" disabled={loading || !newCaseId.trim()}>
+            {t('common.add', 'Legg til')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
 
-export default function PortalCasesPage() {
+export default function CasesPage() {
   return (
     <CompanyProvider>
       <PortalLayout>

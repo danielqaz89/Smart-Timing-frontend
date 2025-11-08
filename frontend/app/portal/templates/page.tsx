@@ -1,878 +1,349 @@
-"use client";
+'use client';
+/* eslint-disable no-useless-escape */
 
-import React, { useEffect, useState } from 'react';
-import {
-  Box,
-  Typography,
-  Paper,
-  TextField,
-  Button,
-  Stack,
-  Alert,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  CircularProgress,
-} from '@mui/material';
+import { useEffect, useMemo, useState } from 'react';
+import { Box, Typography, Tabs, Tab, TextField, Button, Grid, Card, CardContent, Alert, Stack, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import { Save, Visibility } from '@mui/icons-material';
 import { CompanyProvider, useCompany } from '../../../contexts/CompanyContext';
 import PortalLayout from '../../../components/PortalLayout';
+import { useTranslations } from '../../../contexts/TranslationsContext';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000';
 
-type Recipients = { to: string; cc?: string; bcc?: string };
-
-function SendButton({ 
-  onSend, 
-  month, 
-  enforceRecipients, 
-  enforced 
-}: { 
-  onSend: (rcp: Recipients) => Promise<boolean>; 
-  month: string; 
-  enforceRecipients?: boolean; 
-  enforced?: Partial<Recipients>;
-}) {
-  const [to, setTo] = useState('');
-  const [cc, setCc] = useState('');
-  const [bcc, setBcc] = useState('');
-  const [busy, setBusy] = useState(false);
-  const disabled = !!enforceRecipients;
-
-  return (
-    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems="center" sx={{ width: '100%' }}>
-      <TextField
-        size="small"
-        label={disabled ? `To (enforced: ${enforced?.to || 'policy'})` : 'Send to (email)'}
-        value={disabled ? (enforced?.to || '') : to}
-        onChange={(e) => setTo(e.target.value)}
-        sx={{ minWidth: 240, flex: 1 }}
-        disabled={disabled}
-      />
-      <TextField
-        size="small"
-        label={disabled ? 'CC (enforced)' : 'CC (optional)'}
-        value={disabled ? (enforced?.cc || '') : cc}
-        onChange={(e) => setCc(e.target.value)}
-        sx={{ minWidth: 200, flex: 1 }}
-        disabled={disabled}
-      />
-      <TextField
-        size="small"
-        label={disabled ? 'BCC (enforced)' : 'BCC (optional)'}
-        value={disabled ? (enforced?.bcc || '') : bcc}
-        onChange={(e) => setBcc(e.target.value)}
-        sx={{ minWidth: 200, flex: 1 }}
-        disabled={disabled}
-      />
-      <Button
-        variant="contained"
-        disabled={busy || (!disabled && !to)}
-        onClick={async () => {
-          setBusy(true);
-          await onSend({ to: disabled ? enforced?.to || '' : to, cc, bcc });
-          setBusy(false);
-        }}
-      >
-        {busy ? 'Sending…' : `Send (${month})`}
-      </Button>
-    </Stack>
-  );
-}
+const exampleTemplates = {
+  timesheet: `<div style="font-family: Arial, sans-serif; padding: 20px;">
+  <h1>Timeliste - {{period.month_label}}</h1>
+  <p><strong>Bedrift:</strong> {{company.name}}</p>
+  
+  <h2>Sammendrag</h2>
+  <p>Totalt timer: {{totals.total_hours}}</p>
+  {{#if totals.total_amount}}
+  <p>Totalt beløp: {{totals.total_amount}} kr</p>
+  {{/if}}
+  
+  <h2>Timer per sak</h2>
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr style="background: #f0f0f0;">
+      <th style="border: 1px solid #ddd; padding: 8px;">Saksnummer</th>
+      <th style="border: 1px solid #ddd; padding: 8px;">Timer</th>
+    </tr>
+    {{#each per_case}}
+    <tr>
+      <td style="border: 1px solid #ddd; padding: 8px;">{{case_id}}</td>
+      <td style="border: 1px solid #ddd; padding: 8px;">{{hours}}</td>
+    </tr>
+    {{/each}}
+  </table>
+</div>`,
+  case_report: `<div style="font-family: Arial, sans-serif; padding: 20px;">
+  <h1>Saksrapport - {{report.case_id}}</h1>
+  <p><strong>Periode:</strong> {{report.month}}</p>
+  <p><strong>Status:</strong> {{report.status}}</p>
+  
+  <h2>Bakgrunn for tiltaket</h2>
+  <p>{{report.background}}</p>
+  
+  <h2>Arbeid og tiltak som er gjennomført</h2>
+  <p>{{report.actions}}</p>
+  
+  <h2>Fremgang og utvikling</h2>
+  <p>{{report.progress}}</p>
+  
+  <h2>Utfordringer</h2>
+  <p>{{report.challenges}}</p>
+  
+  <h2>Faktorer som påvirker</h2>
+  <p>{{report.factors}}</p>
+  
+  <h2>Vurdering</h2>
+  <p>{{report.assessment}}</p>
+  
+  <h2>Anbefalinger</h2>
+  <p>{{report.recommendations}}</p>
+</div>`
+};
 
 function TemplatesContent() {
+  const { t } = useTranslations();
   const { fetchWithAuth } = useCompany();
-  const [type, setType] = useState<'timesheet' | 'report' | 'case_report'>('timesheet');
-  const [html, setHtml] = useState('<h1>{{company.name}}</h1>');
-  const [css, setCss] = useState('body{font-family:Arial}');
-  const [previewHtml, setPreviewHtml] = useState('');
+  const [activeTab, setActiveTab] = useState<'timesheet' | 'case_report'>('timesheet');
+  const [html, setHtml] = useState('');
+  const [css, setCss] = useState('body { font-family: Arial, sans-serif; }');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  
-  const [month, setMonth] = useState(() => {
-    const d = new Date();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    return `${d.getFullYear()}${m}`;
-  });
-  
-  const [users, setUsers] = useState<any[]>([]);
-  const [userId, setUserId] = useState<number | ''>('');
-  const [policy, setPolicy] = useState<any>(null);
-  
-  // Report configuration
-  const [showConfig, setShowConfig] = useState(false);
-  const [caseReportData, setCaseReportData] = useState({
-    background: '',
-    actions: '',
-    progress: '',
-    challenges: '',
-    factors: '',
-    assessment: '',
-    recommendations: '',
-    notes: '',
-  });
-  const [reportConfig, setReportConfig] = useState({
-    includeColumns: {
-      date: true,
-      start_time: true,
-      end_time: true,
-      break_hours: true,
-      hours: true,
-      activity: true,
-      title: false,
-      project: false,
-      place: false,
-      case_id: true,
-      notes: false,
-      user_email: false,
-    },
-    groupBy: 'none' as 'none' | 'case_id' | 'user_email' | 'activity',
-    showTotals: true,
-    showSummary: true,
-    includeWeekends: true,
-    sortBy: 'date' as 'date' | 'hours' | 'case_id',
-  });
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
-    (async () => {
-      const res = await fetchWithAuth(`${API_BASE}/api/company/users`);
-      const data = await res.json();
-      if (res.ok) setUsers(data.users || []);
-    })();
-  }, [fetchWithAuth]);
+    loadTemplate(activeTab);
+  }, [activeTab]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetchWithAuth(`${API_BASE}/api/company/policy`);
-        const p = await res.json();
-        if (res.ok) setPolicy(p);
-      } catch {}
-    })();
-  }, [fetchWithAuth]);
-
-  useEffect(() => {
-    (async () => {
+  const loadTemplate = async (type: string) => {
+    try {
       const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}`);
       const data = await res.json();
-      if (res.ok) {
-        if (data?.template_html) setHtml(data.template_html);
-        if (data?.template_css) setCss(data.template_css);
-      }
-    })();
-  }, [type, fetchWithAuth]);
-
-  async function save() {
-    setError('');
-    setSuccess('');
-    try {
-      const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ template_html: html, template_css: css, is_active: true }),
-      });
-      if (!res.ok) throw new Error('Failed to save template');
-      setSuccess('Template saved successfully');
-    } catch (e: any) {
-      setError(e?.message || 'Failed to save template');
-    }
-  }
-
-  async function preview() {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}/preview`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ template_html: html, template_css: css, month, company_user_id: userId || undefined }),
-      });
-      const data = await res.json();
-      if (res.ok) setPreviewHtml(data.html);
-      else throw new Error(data.error || 'Preview failed');
-    } catch (e: any) {
-      setError(e?.message || 'Preview failed');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function downloadPdf() {
-    setError('');
-    try {
-      const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}/pdf`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ template_html: html, template_css: css, month, company_user_id: userId || undefined }),
-      });
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${type}-${month}.pdf`;
-        a.click();
-        URL.revokeObjectURL(url);
-      } else {
-        throw new Error('PDF generation failed');
-      }
-    } catch (e: any) {
-      setError(e?.message || 'PDF generation failed');
-    }
-  }
-
-  async function sendDesigned(rcp: Recipients) {
-    setError('');
-    setSuccess('');
-    try {
-      const res = await fetchWithAuth(`${API_BASE}/api/company/templates/${type}/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: rcp.to,
-          cc: rcp.cc || undefined,
-          bcc: rcp.bcc || undefined,
-          month,
-          company_user_id: userId || undefined,
-          template_html: html,
-          template_css: css,
-        }),
-      });
-      if (!res.ok) throw new Error('Failed to send');
-      setSuccess('Email sent successfully');
-      return true;
-    } catch (e: any) {
-      setError(e?.message || 'Failed to send');
-      return false;
-    }
-  }
-
-  const exampleTemplates = {
-    timesheet: {
-      html: `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Timeliste</title>
-</head>
-<body>
-  <div class="header">
-    <h1>{{company.name}}</h1>
-    <p>Timeliste for {{period.month_label}}</p>
-  </div>
-
-  <div class="summary">
-    <p><strong>Totale timer:</strong> {{totals.total_hours}}</p>
-    <p><strong>Antall dager:</strong> {{totals.days_count}}</p>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Dato</th>
-        <th>Inn</th>
-        <th>Ut</th>
-        <th>Pause</th>
-        <th>Timer</th>
-        <th>Aktivitet</th>
-        <th>Notater</th>
-      </tr>
-    </thead>
-    <tbody>
-      {{#each rows}}
-      <tr>
-        <td>{{this.date}}</td>
-        <td>{{this.start_time}}</td>
-        <td>{{this.end_time}}</td>
-        <td>{{this.break_hours}}</td>
-        <td>{{this.hours}}</td>
-        <td>{{this.activity}}</td>
-        <td>{{this.notes}}</td>
-      </tr>
-      {{/each}}
-    </tbody>
-  </table>
-
-  <div class="footer">
-    <p>Generert: {{generated_at}}</p>
-  </div>
-</body>
-</html>`,
-      css: `body {
-  font-family: Arial, sans-serif;
-  margin: 20px;
-  color: #333;
-}
-
-.header {
-  text-align: center;
-  margin-bottom: 30px;
-  border-bottom: 2px solid #1976d2;
-  padding-bottom: 10px;
-}
-
-.header h1 {
-  margin: 0;
-  color: #1976d2;
-}
-
-.summary {
-  background: #f5f5f5;
-  padding: 15px;
-  border-radius: 5px;
-  margin-bottom: 20px;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 20px;
-}
-
-th, td {
-  border: 1px solid #ddd;
-  padding: 8px;
-  text-align: left;
-}
-
-th {
-  background-color: #1976d2;
-  color: white;
-  font-weight: bold;
-}
-
-tr:nth-child(even) {
-  background-color: #f9f9f9;
-}
-
-.footer {
-  text-align: center;
-  color: #666;
-  font-size: 0.9em;
-  margin-top: 30px;
-}
-
-@media print {
-  body { margin: 0; }
-  .header { page-break-after: avoid; }
-}`
-    },
-    report: {
-      html: `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Rapport</title>
-</head>
-<body>
-  <div class="header">
-    <h1>{{company.name}}</h1>
-    <h2>Månedlig rapport - {{period.month_label}}</h2>
-  </div>
-
-  <div class="summary">
-    <div class="summary-card">
-      <h3>Totale timer</h3>
-      <p class="big-number">{{totals.total_hours}}</p>
-    </div>
-    <div class="summary-card">
-      <h3>Antall saker</h3>
-      <p class="big-number">{{totals.case_count}}</p>
-    </div>
-  </div>
-
-  <h3>Timer per saksnummer</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Saksnummer</th>
-        <th>Timer</th>
-        <th>Andel</th>
-      </tr>
-    </thead>
-    <tbody>
-      {{#each rows}}
-      <tr>
-        <td>{{this.case_id}}</td>
-        <td>{{this.hours}}</td>
-        <td>{{this.percentage}}%</td>
-      </tr>
-      {{/each}}
-    </tbody>
-  </table>
-
-  <div class="footer">
-    <p>Generert: {{generated_at}}</p>
-  </div>
-</body>
-</html>`,
-      css: `body {
-  font-family: Arial, sans-serif;
-  margin: 20px;
-  color: #333;
-}
-
-.header {
-  text-align: center;
-  margin-bottom: 30px;
-  border-bottom: 3px solid #2e7d32;
-  padding-bottom: 15px;
-}
-
-.header h1 {
-  margin: 0;
-  color: #2e7d32;
-}
-
-.header h2 {
-  margin: 10px 0 0 0;
-  color: #666;
-  font-weight: normal;
-}
-
-.summary {
-  display: flex;
-  gap: 20px;
-  margin-bottom: 30px;
-}
-
-.summary-card {
-  flex: 1;
-  background: linear-gradient(135deg, #2e7d32 0%, #4caf50 100%);
-  color: white;
-  padding: 20px;
-  border-radius: 10px;
-  text-align: center;
-}
-
-.summary-card h3 {
-  margin: 0 0 10px 0;
-  font-size: 0.9em;
-}
-
-.big-number {
-  font-size: 2.5em;
-  font-weight: bold;
-  margin: 0;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 20px;
-}
-
-th, td {
-  border: 1px solid #ddd;
-  padding: 12px;
-  text-align: left;
-}
-
-th {
-  background-color: #2e7d32;
-  color: white;
-  font-weight: bold;
-}
-
-tr:nth-child(even) {
-  background-color: #f9f9f9;
-}
-
-.footer {
-  text-align: center;
-  color: #666;
-  font-size: 0.9em;
-  margin-top: 30px;
-}
-
-@media print {
-  body { margin: 0; }
-  .summary { page-break-after: avoid; }
-}`
-    },
-    case_report: {
-      html: `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Saksrapport</title>
-</head>
-<body>
-  <div class="header">
-    <h1>{{company.name}}</h1>
-    <h2>Saksrapport - {{period.month_label}}</h2>
-  </div>
-
-  <section>
-    <h3>Bakgrunn for tiltaket</h3>
-    <p>{{report.background}}</p>
-  </section>
-
-  <section>
-    <h3>Arbeid og tiltak som er gjennomført</h3>
-    <p>{{report.actions}}</p>
-  </section>
-
-  <section>
-    <h3>Utvikling og endring siden oppstart</h3>
-    <p>{{report.progress}}</p>
-  </section>
-
-  <section>
-    <h3>Nåværende utfordringer</h3>
-    <p>{{report.challenges}}</p>
-  </section>
-
-  <section>
-    <h3>Interesser og påvirkningsfaktorer</h3>
-    <p>{{report.factors}}</p>
-  </section>
-
-  <section>
-    <h3>Faglig vurdering</h3>
-    <p>{{report.assessment}}</p>
-  </section>
-
-  <section>
-    <h3>Anbefalinger videre</h3>
-    <p>{{report.recommendations}}</p>
-  </section>
-
-  {{#if report.notes}}
-  <section>
-    <h3>Tilleggsnotater</h3>
-    <p>{{report.notes}}</p>
-  </section>
-  {{/if}}
-
-  <div class="footer">
-    <p>Generert: {{generated_at}}</p>
-  </div>
-</body>
-</html>`,
-      css: `body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
-.header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #6a1b9a; padding-bottom: 15px; }
-.header h1 { margin: 0; color: #6a1b9a; }
-.header h2 { margin: 10px 0 0 0; color: #666; font-weight: normal; }
-section { margin-bottom: 20px; }
-section h3 { margin: 0 0 6px 0; color: #6a1b9a; }
-.footer { text-align: center; color: #666; font-size: 0.9em; margin-top: 30px; }`
+      setHtml(data.template_html || exampleTemplates[type as keyof typeof exampleTemplates]);
+      setCss(data.template_css || 'body { font-family: Arial, sans-serif; }');
+    } catch (error) {
+      console.error('Failed to load template:', error);
+      setHtml(exampleTemplates[type as keyof typeof exampleTemplates]);
     }
   };
 
-  function loadExample() {
-    const example = exampleTemplates[type];
-    setHtml(example.html);
-    setCss(example.css);
-    setSuccess('Example template loaded');
-  }
+  const handleSave = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      await fetchWithAuth(`${API_BASE}/api/company/templates/${activeTab}`, {
+        method: 'PUT',
+        body: JSON.stringify({ template_html: html, template_css: css }),
+      });
+      setMessage(t('portal.templates.saved', 'Mal lagret!'));
+    } catch (error) {
+      setMessage(t('portal.templates.save_failed', 'Kunne ikke lagre mal'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Quick insert helpers
+  const insertTimesheetSection = () => {
+    const snippet = `\n<section>\n  <h2>${t('portal.templates.ts_hours_per_case', 'Timer per sak')}</h2>\n  <table style="width:100%; border-collapse: collapse;">\n    <tr style="background:#f0f0f0">\n      <th style=\"border:1px solid #ddd; padding:8px;\">${t('portal.templates.case_id', 'Saksnummer')}</th>\n      <th style=\"border:1px solid #ddd; padding:8px;\">${t('portal.templates.hours', 'Timer')}</th>\n    </tr>\n    {{#each per_case}}\n    <tr>\n      <td style=\"border:1px solid #ddd; padding:8px;\">{{case_id}}</td>\n      <td style=\"border:1px solid #ddd; padding:8px;\">{{hours}}</td>\n    </tr>\n    {{/each}}\n  </table>\n</section>\n`;
+    setHtml((h) => h + snippet);
+  };
+
+  const insertReportSkeleton = () => {
+    const snippet = `\n<section>\n  <h2>${t('portal.templates.report_sections', 'Rapportseksjoner')}</h2>\n  <h3>${t('portal.templates.background', 'Bakgrunn')}</h3>\n  <p>{{report.background}}</p>\n  <h3>${t('portal.templates.actions_done', 'Tiltak gjennomført')}</h3>\n  <p>{{report.actions}}</p>\n  <h3>${t('portal.templates.progress', 'Fremgang')}</h3>\n  <p>{{report.progress}}</p>\n  <h3>${t('portal.templates.challenges', 'Utfordringer')}</h3>\n  <p>{{report.challenges}}</p>\n  <h3>${t('portal.templates.factors', 'Faktorer som påvirker')}</h3>\n  <p>{{report.factors}}</p>\n  <h3>${t('portal.templates.assessment', 'Vurdering')}</h3>\n  <p>{{report.assessment}}</p>\n  <h3>${t('portal.templates.recommendations', 'Anbefalinger')}</h3>\n  <p>{{report.recommendations}}</p>\n</section>\n`;
+    setHtml((h) => h + snippet);
+  };
+
+  const insertHeader = () => {
+    const snippet = `\n<header style=\"display:flex; justify-content:space-between; align-items:center;\">\n  <div>\n    <h1>{{company.name}}</h1>\n    <div>${t('portal.templates.period', 'Periode')}: {{period.month_label}}</div>\n  </div>\n  <div>\n    <!-- ${t('portal.templates.logo_hint', 'Bytt ut med logo-URL')} -->\n    <img src=\"{{company.logo_url}}\" alt=\"logo\" style=\"height:48px; object-fit:contain;\"/>\n  </div>\n</header>\n`;
+    setHtml((h) => h + snippet);
+  };
+
+  const insertBaseStyles = () => {
+    const snippet = `\n/* ${t('portal.templates.base_styles', 'Grunnleggende typografi og bord')}: */\nbody { font-family: Arial, sans-serif; }\nh1,h2,h3 { margin: 0 0 8px; }\nsection { margin: 16px 0; }\ntable { width: 100%; border-collapse: collapse; }\nth, td { border: 1px solid #ddd; padding: 8px; }\ntr:nth-child(even) { background: #fafafa; }\n`;
+    setCss((c) => c + snippet);
+  };
+
+  // ===== Simple client-side preview rendering (very limited Handlebars) =====
+  const getPath = (obj: any, path: string) => path.split('.').reduce((o, k) => (o && k in o ? o[k] : undefined), obj);
+  const replaceVars = (str: string, dataObj: any) =>
+    str.replace(/{{\s*([\w\.]+)\s*}}/g, (_, p: string) => {
+      const v = getPath(dataObj, p);
+      return v == null ? '' : String(v);
+    });
+  const renderEachBlocks = (tpl: string, dataObj: any) =>
+    tpl.replace(/{{#each\s+(\w+)}}([\s\S]*?){{\/each}}/g, (_m, arrKey: string, inner: string) => {
+      const arr = dataObj?.[arrKey];
+      if (!Array.isArray(arr)) return '';
+      return arr
+        .map((item) => replaceVars(inner, { ...dataObj, ...item }))
+        .join('');
+    });
+  const simpleRender = (tpl: string, dataObj: any) => replaceVars(renderEachBlocks(tpl, dataObj), dataObj);
+
+  const previewData = useMemo(() => {
+    const monthLabel = new Date().toLocaleString('no-NO', { month: 'long', year: 'numeric' });
+    return {
+      company: { name: 'Eksempelselskap AS', logo_url: '/icons/company.svg' },
+      period: { month_label: monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1) },
+      totals: { total_hours: 123.5, total_amount: 45678 },
+      per_case: [
+        { case_id: '2025-001', hours: 12.5 },
+        { case_id: '2025-002', hours: 8 },
+        { case_id: '2025-003', hours: 15.75 },
+      ],
+      report: {
+        case_id: '2025-001',
+        month: monthLabel,
+        status: 'draft',
+        background: 'Kort bakgrunn for tiltaket...',
+        actions: 'Tiltak gjennomført denne måneden...',
+        progress: 'Fremgang og utvikling...',
+        challenges: 'Eventuelle utfordringer...',
+        factors: 'Faktorer som påvirker...',
+        assessment: 'Vurdering...',
+        recommendations: 'Anbefalinger...'
+      },
+    };
+  }, [activeTab]);
+
+  const [previewPageMode, setPreviewPageMode] = useState<'web' | 'a4'>('web');
+  const [previewOrientation, setPreviewOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [previewDir, setPreviewDir] = useState<'ltr' | 'rtl'>('ltr');
+  const [previewDoc, setPreviewDoc] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => {
+      try {
+        const rendered = simpleRender(html || '', previewData);
+        const printCSS = previewPageMode === 'a4'
+          ? `@page { size: A4 ${previewOrientation}; margin: 16mm; } body { margin: 0; }`
+          : '';
+        const dirCSS = `html{direction:${previewDir};}`;
+        const doc = `<!doctype html><html><head><meta charset=\"UTF-8\"/><style>${dirCSS}${printCSS}${css || ''}</style></head><body>${rendered}</body></html>`;
+        setPreviewDoc(doc);
+      } catch {
+        const doc = `<!doctype html><html><head><meta charset=\"UTF-8\"/><style>${css || ''}</style></head><body><pre style=\"color:#b00020\">${t('portal.templates.preview_error', 'Forhåndsvisning feilet')}</pre></body></html>`;
+        setPreviewDoc(doc);
+      }
+    }, 300);
+    return () => clearTimeout(id);
+  }, [html, css, previewData, t, previewPageMode, previewOrientation, previewDir]);
+
+  const downloadPreview = () => {
+    try {
+      const blob = new Blob([previewDoc], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${activeTab}-preview.html`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch { void 0; }
+  };
+
+  const downloadPDF = async () => {
+    try {
+      const iframe = document.querySelector('iframe[title="template-preview"]') as HTMLIFrameElement | null;
+      const doc = iframe?.contentDocument;
+      if (!doc) return;
+      const { jsPDF } = await import('jspdf');
+      await import('html2canvas');
+      const pdf = new jsPDF(previewOrientation === 'landscape' ? 'l' : 'p', 'pt', 'a4');
+      await pdf.html(doc.body as HTMLElement, {
+        margin: [20, 20, 20, 20],
+        autoPaging: 'text',
+        html2canvas: { scale: 0.8, useCORS: true },
+      });
+      pdf.save(`${activeTab}-preview.pdf`);
+    } catch (e) {
+      // Fallback: open print dialog
+      const win = window.open('', '_blank');
+      if (win) {
+        win.document.write(previewDoc);
+        win.document.close();
+        win.focus();
+        win.print();
+      }
+    }
+  };
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>Rapportgenerator</Typography>
-      <Typography variant="body2" color="text.secondary" gutterBottom>
-        Skreddersy dine egne timelister og rapporter med HTML/CSS. Bruk Handlebars-variabler for å vise data.
-      </Typography>
+      <Typography variant="h4" gutterBottom>{t('portal.templates.title', 'Dokumentmaler')}</Typography>
+      
+      <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} sx={{ mb: 2 }}>
+        <Tab label={t('portal.templates.tab_timesheet', 'Timeliste')} value="timesheet" />
+        <Tab label={t('portal.templates.tab_case_report', 'Saksrapport')} value="case_report" />
+      </Tabs>
 
-      {error && <Alert severity="error" sx={{ my: 2 }} onClose={() => setError('')}>{error}</Alert>}
-      {success && <Alert severity="success" sx={{ my: 2 }} onClose={() => setSuccess('')}>{success}</Alert>}
+      {message && (
+        <Alert severity={message.includes('feilet') ? 'error' : 'success'} sx={{ mb: 2 }}>{message}</Alert>
+      )}
 
-      <Alert severity="info" sx={{ mb: 3 }}>
-        <Typography variant="subtitle2" gutterBottom>Tilgjengelige variabler:</Typography>
-        <Typography variant="caption" component="div">
-          <strong>Bedriftsinfo:</strong> <code>{'{{company.name}}'}</code>, <code>{'{{company.orgnr}}'}</code><br/>
-          <strong>Periode:</strong> <code>{'{{period.month_label}}'}</code>, <code>{'{{period.year}}'}</code>, <code>{'{{generated_at}}'}</code><br/>
-          <strong>Totaler:</strong> <code>{'{{totals.total_hours}}'}</code>, <code>{'{{totals.days_count}}'}</code>, <code>{'{{totals.case_count}}'}</code><br/>
-          <strong>Loop (timer):</strong> <code>{'{{#each rows}} {{this.date}} {{this.hours}} {{/each}}'}</code><br/>
-          <strong>Felter:</strong> date, start_time, end_time, break_hours, hours, activity, title, case_id, notes, user_email<br/>
-          {type === 'case_report' && (
-            <><strong>Saksrapport:</strong> <code>{'{{report.background}}'}</code>, <code>{'{{report.actions}}'}</code>, <code>{'{{report.progress}}'}</code>, <code>{'{{report.challenges}}'}</code>, <code>{'{{report.factors}}'}</code>, <code>{'{{report.assessment}}'}</code>, <code>{'{{report.recommendations}}'}</code>, <code>{'{{report.notes}}'}</code></>
-          )}
-        </Typography>
-      </Alert>
-
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Stack spacing={2}>
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center" justifyContent="space-between">
-            <FormControl sx={{ maxWidth: 240 }}>
-              <InputLabel>Document Type</InputLabel>
-              <Select label="Document Type" value={type} onChange={(e) => setType(e.target.value as any)}>
-                <MenuItem value="timesheet">Timesheet</MenuItem>
-                <MenuItem value="report">Report</MenuItem>
-                <MenuItem value="case_report">Saksrapport</MenuItem>
-              </Select>
-            </FormControl>
-            <Button variant="outlined" onClick={loadExample} startIcon={<Typography>📝</Typography>}>
-              Last eksempelmal
-            </Button>
-          </Stack>
-
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            <TextField
-              label="Måned (YYYYMM)"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              sx={{ maxWidth: 200 }}
-            />
-            <FormControl sx={{ minWidth: 240 }}>
-              <InputLabel>Filtrer på bruker (valgfritt)</InputLabel>
-              <Select
-                label="Filtrer på bruker (valgfritt)"
-                value={userId === '' ? '' : String(userId)}
-                onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : '')}
-                displayEmpty
-              >
-                <MenuItem value="">Alle brukere</MenuItem>
-                {users.map((u: any) => (
-                  <MenuItem key={u.id} value={u.id}>{u.user_email}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <Button variant="outlined" onClick={() => setShowConfig(!showConfig)}>
-              {showConfig ? 'Skjul' : 'Vis'} rapportinnstillinger
-            </Button>
-          </Stack>
-
-          {showConfig && (
-            <Paper sx={{ p: 2, bgcolor: 'background.default' }} variant="outlined">
-              <Typography variant="subtitle2" gutterBottom>Rapportinnhold</Typography>
-              <Typography variant="caption" color="text.secondary" gutterBottom display="block">
-                Velg hvilke kolonner som skal inkluderes i rapporten:
+      <Grid container spacing={2}>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>{t('portal.templates.editor_html', 'HTML')}</Typography>
+              <TextField
+                fullWidth
+                multiline
+                rows={20}
+                value={html}
+                onChange={(e) => setHtml(e.target.value)}
+                placeholder={t('portal.templates.placeholder_html', 'Skriv HTML med Handlebars-variabler...')}
+                sx={{ fontFamily: 'monospace', fontSize: '12px' }}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                {t('portal.templates.variables_hint', 'Tilgjengelige variabler: {{company.name}}, {{period.month_label}}, {{totals.total_hours}}, {{per_case}}, {{report.*}}')}
               </Typography>
-              
-              <Stack direction="row" flexWrap="wrap" gap={2} sx={{ mt: 2 }}>
-                {Object.entries(reportConfig.includeColumns).map(([key, value]) => (
-                  <FormControl key={key} component="label" sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
-                    <input
-                      type="checkbox"
-                      checked={value}
-                      onChange={(e) => setReportConfig({
-                        ...reportConfig,
-                        includeColumns: { ...reportConfig.includeColumns, [key]: e.target.checked }
-                      })}
-                      style={{ marginRight: 8 }}
-                    />
-                    <Typography variant="body2">{key.replace('_', ' ')}</Typography>
+              <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
+                <Button size="small" variant="outlined" onClick={insertHeader}>{t('portal.templates.insert_header', 'Sett inn topptekst')}</Button>
+                <Button size="small" variant="outlined" onClick={insertTimesheetSection}>{t('portal.templates.insert_timesheet_table', 'Sett inn timeliste-tabell')}</Button>
+                <Button size="small" variant="outlined" onClick={insertReportSkeleton}>{t('portal.templates.insert_report_skeleton', 'Sett inn saksrapport-skjelett')}</Button>
+                <Button size="small" component={"a" as any} href="https://handlebarsjs.com/guide/" target="_blank" rel="noreferrer">
+                  {t('portal.templates.handlebars_docs', 'Handlebars-dokumentasjon')}
+                </Button>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>{t('portal.templates.editor_css', 'CSS')}</Typography>
+              <TextField
+                fullWidth
+                multiline
+                rows={12}
+                value={css}
+                onChange={(e) => setCss(e.target.value)}
+                placeholder={t('portal.templates.placeholder_css', 'Skriv CSS...')}
+                sx={{ fontFamily: 'monospace', fontSize: '12px' }}
+              />
+              <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
+                <Button size="small" variant="outlined" onClick={insertBaseStyles}>{t('portal.templates.insert_base_styles', 'Sett inn grunnstiler')}</Button>
+              </Stack>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mt: 2 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>{t('portal.templates.preview', 'Forhåndsvisning')}</Typography>
+
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'stretch', sm: 'center' }} sx={{ mb: 1 }}>
+                <FormControl size="small" sx={{ minWidth: 140 }}>
+                  <InputLabel>{t('portal.templates.page_mode', 'Side')}</InputLabel>
+                  <Select label={t('portal.templates.page_mode', 'Side')} value={previewPageMode} onChange={(e)=>setPreviewPageMode(e.target.value as any)}>
+                    <MenuItem value="web">{t('portal.templates.web_fluid', 'Web (flytende)')}</MenuItem>
+                    <MenuItem value="a4">{t('portal.templates.a4_print', 'A4 (utskrift)')}</MenuItem>
+                  </Select>
+                </FormControl>
+                {previewPageMode === 'a4' && (
+                  <FormControl size="small" sx={{ minWidth: 140 }}>
+                    <InputLabel>{t('portal.templates.orientation', 'Retning')}</InputLabel>
+                    <Select label={t('portal.templates.orientation', 'Retning')} value={previewOrientation} onChange={(e)=>setPreviewOrientation(e.target.value as any)}>
+                      <MenuItem value="portrait">{t('portal.templates.portrait', 'Stående')}</MenuItem>
+                      <MenuItem value="landscape">{t('portal.templates.landscape', 'Liggende')}</MenuItem>
+                    </Select>
                   </FormControl>
-                ))}
-              </Stack>
-
-              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mt: 3 }}>
-                <FormControl sx={{ minWidth: 200 }}>
-                  <InputLabel>Grupper data</InputLabel>
-                  <Select
-                    label="Grupper data"
-                    value={reportConfig.groupBy}
-                    onChange={(e) => setReportConfig({ ...reportConfig, groupBy: e.target.value as any })}
-                  >
-                    <MenuItem value="none">Ingen gruppering</MenuItem>
-                    <MenuItem value="case_id">Per saksnummer</MenuItem>
-                    <MenuItem value="user_email">Per bruker</MenuItem>
-                    <MenuItem value="activity">Per aktivitet</MenuItem>
+                )}
+                <FormControl size="small" sx={{ minWidth: 140 }}>
+                  <InputLabel>{t('portal.templates.direction', 'Skriveretning')}</InputLabel>
+                  <Select label={t('portal.templates.direction', 'Skriveretning')} value={previewDir} onChange={(e)=>setPreviewDir(e.target.value as any)}>
+                    <MenuItem value="ltr">LTR</MenuItem>
+                    <MenuItem value="rtl">RTL</MenuItem>
                   </Select>
                 </FormControl>
-
-                <FormControl sx={{ minWidth: 200 }}>
-                  <InputLabel>Sorter etter</InputLabel>
-                  <Select
-                    label="Sorter etter"
-                    value={reportConfig.sortBy}
-                    onChange={(e) => setReportConfig({ ...reportConfig, sortBy: e.target.value as any })}
-                  >
-                    <MenuItem value="date">Dato</MenuItem>
-                    <MenuItem value="hours">Timer</MenuItem>
-                    <MenuItem value="case_id">Saksnummer</MenuItem>
-                  </Select>
-                </FormControl>
+                <Button size="small" variant="outlined" onClick={downloadPreview}>{t('portal.templates.download_html', 'Last ned HTML')}</Button>
+                <Button size="small" variant="contained" onClick={downloadPDF}>{t('portal.templates.download_pdf', 'Last ned PDF')}</Button>
               </Stack>
 
-              <Stack direction="row" spacing={3} sx={{ mt: 2 }}>
-                <FormControl component="label">
-                  <Stack direction="row" alignItems="center">
-                    <input
-                      type="checkbox"
-                      checked={reportConfig.showTotals}
-                      onChange={(e) => setReportConfig({ ...reportConfig, showTotals: e.target.checked })}
-                      style={{ marginRight: 8 }}
-                    />
-                    <Typography variant="body2">Vis totaler</Typography>
-                  </Stack>
-                </FormControl>
-                <FormControl component="label">
-                  <Stack direction="row" alignItems="center">
-                    <input
-                      type="checkbox"
-                      checked={reportConfig.showSummary}
-                      onChange={(e) => setReportConfig({ ...reportConfig, showSummary: e.target.checked })}
-                      style={{ marginRight: 8 }}
-                    />
-                    <Typography variant="body2">Vis sammendrag</Typography>
-                  </Stack>
-                </FormControl>
-                <FormControl component="label">
-                  <Stack direction="row" alignItems="center">
-                    <input
-                      type="checkbox"
-                      checked={reportConfig.includeWeekends}
-                      onChange={(e) => setReportConfig({ ...reportConfig, includeWeekends: e.target.checked })}
-                      style={{ marginRight: 8 }}
-                    />
-                    <Typography variant="body2">Inkluder helger</Typography>
-                  </Stack>
-                </FormControl>
-              </Stack>
-
-              <Alert severity="success" sx={{ mt: 2 }}>
-                Disse innstillingene brukes når du genererer forhåndsvisning og PDF. 
-                Du kan også redigere HTML-malen direkte for full kontroll.
-              </Alert>
-            </Paper>
-          )}
-
-          {type === 'case_report' && (
-            <Paper sx={{ p: 2, bgcolor: 'background.default' }} variant="outlined">
-              <Typography variant="subtitle2" gutterBottom>Saksrapport innhold</Typography>
-              <Typography variant="caption" color="text.secondary" gutterBottom display="block">
-                Fyll inn innholdet for saksrapporten. Dette vil bli tilgjengelig som variabler i HTML-malen.
+              <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                <iframe title="template-preview" style={{ width: '100%', height: 480, border: '0' }} srcDoc={previewDoc} />
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                {t('portal.templates.preview_hint', 'Forhåndsvisningen er veiledende og støtter enkle variabler og each-løkker.')}
               </Typography>
-              <Stack spacing={2} sx={{ mt: 2 }}>
-                <TextField
-                  label="Bakgrunn for tiltaket"
-                  multiline
-                  rows={3}
-                  value={caseReportData.background}
-                  onChange={(e) => setCaseReportData({ ...caseReportData, background: e.target.value })}
-                  fullWidth
-                  placeholder="Beskriv bakgrunnen for tiltaket..."
-                />
-                <TextField
-                  label="Arbeid og tiltak som er gjennomført"
-                  multiline
-                  rows={3}
-                  value={caseReportData.actions}
-                  onChange={(e) => setCaseReportData({ ...caseReportData, actions: e.target.value })}
-                  fullWidth
-                  placeholder="Beskriv arbeid og tiltak..."
-                />
-                <TextField
-                  label="Utvikling og endring siden oppstart"
-                  multiline
-                  rows={3}
-                  value={caseReportData.progress}
-                  onChange={(e) => setCaseReportData({ ...caseReportData, progress: e.target.value })}
-                  fullWidth
-                  placeholder="Beskriv utvikling og endring..."
-                />
-                <TextField
-                  label="Nåværende utfordringer"
-                  multiline
-                  rows={3}
-                  value={caseReportData.challenges}
-                  onChange={(e) => setCaseReportData({ ...caseReportData, challenges: e.target.value })}
-                  fullWidth
-                  placeholder="Beskriv utfordringer..."
-                />
-                <TextField
-                  label="Interesser og påvirkningsfaktorer"
-                  multiline
-                  rows={3}
-                  value={caseReportData.factors}
-                  onChange={(e) => setCaseReportData({ ...caseReportData, factors: e.target.value })}
-                  fullWidth
-                  placeholder="Beskriv interesser og faktorer..."
-                />
-                <TextField
-                  label="Faglig vurdering"
-                  multiline
-                  rows={3}
-                  value={caseReportData.assessment}
-                  onChange={(e) => setCaseReportData({ ...caseReportData, assessment: e.target.value })}
-                  fullWidth
-                  placeholder="Gi faglig vurdering..."
-                />
-                <TextField
-                  label="Anbefalinger videre"
-                  multiline
-                  rows={3}
-                  value={caseReportData.recommendations}
-                  onChange={(e) => setCaseReportData({ ...caseReportData, recommendations: e.target.value })}
-                  fullWidth
-                  placeholder="Gi anbefalinger..."
-                />
-                <TextField
-                  label="Tilleggsnotater (valgfritt)"
-                  multiline
-                  rows={2}
-                  value={caseReportData.notes}
-                  onChange={(e) => setCaseReportData({ ...caseReportData, notes: e.target.value })}
-                  fullWidth
-                  placeholder="Eventuelle tilleggsnotater..."
-                />
-              </Stack>
-            </Paper>
-          )}
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
 
-          <TextField
-            label="HTML Template"
-            multiline
-            minRows={12}
-            value={html}
-            onChange={(e) => setHtml(e.target.value)}
-            fullWidth
-          />
-
-          <TextField
-            label="CSS (print CSS supported)"
-            multiline
-            minRows={6}
-            value={css}
-            onChange={(e) => setCss(e.target.value)}
-            fullWidth
-          />
-
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} flexWrap="wrap">
-            <Button onClick={save} variant="contained">Save</Button>
-            <Button onClick={preview} variant="outlined" disabled={loading}>
-              {loading ? 'Loading...' : 'Preview'}
-            </Button>
-            <Button onClick={downloadPdf} variant="outlined">Download PDF</Button>
-          </Stack>
-
-          <SendButton
-            onSend={sendDesigned}
-            month={month}
-            enforceRecipients={!!policy?.enforce_timesheet_recipient}
-            enforced={{
-              to: policy?.enforced_timesheet_to,
-              cc: policy?.enforced_timesheet_cc,
-              bcc: policy?.enforced_timesheet_bcc,
-            }}
-          />
-
-          {policy?.enforce_timesheet_recipient ? (
-            <Alert severity="info">
-              Recipients are enforced by company policy: {policy?.enforced_timesheet_to || '—'}
-              {policy?.enforced_timesheet_cc ? ` • CC: ${policy.enforced_timesheet_cc}` : ''}
-              {policy?.enforced_timesheet_bcc ? ` • BCC: ${policy.enforced_timesheet_bcc}` : ''}
-            </Alert>
-          ) : (
-            <Typography variant="caption" color="text.secondary">
-              Specify To/CC/BCC freely. Company policy can override this if enabled.
-            </Typography>
-          )}
-
-          <Typography variant="subtitle2">Preview</Typography>
-          <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, height: 400, overflow: 'auto' }}>
-            <iframe title="preview" style={{ width: '100%', height: 400, border: 'none' }} srcDoc={previewHtml}></iframe>
-          </Box>
-        </Stack>
-      </Paper>
+      <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
+        <Button variant="contained" startIcon={<Save />} onClick={handleSave} disabled={loading}>
+          {t('portal.templates.save', 'Lagre mal')}
+        </Button>
+      </Box>
     </Box>
   );
 }
 
-export default function PortalTemplatesPage() {
+export default function TemplatesPage() {
   return (
     <CompanyProvider>
       <PortalLayout>
