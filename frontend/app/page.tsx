@@ -420,7 +420,8 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
       }
     }
     
-    return [...new Set(potentialNames)];
+    // Deduplicate without relying on Set iteration to satisfy TS in stricter targets
+    return potentialNames.filter((v, i, a) => a.indexOf(v) === i);
   }
 
   // Check for names when text changes (miljøarbeider template only)
@@ -428,7 +429,8 @@ function ReportGenerator({ month, onToast }: { month: string; onToast: (msg: str
     if (template === 'miljøarbeider' || template === 'auto') {
       const introNames = detectPotentialNames(customIntro);
       const notesNames = detectPotentialNames(customNotes);
-      setDetectedNames([...new Set([...introNames, ...notesNames])]);
+      const merged = introNames.concat(notesNames);
+      setDetectedNames(merged.filter((v, i, a) => a.indexOf(v) === i));
     } else {
       setDetectedNames([]);
     }
