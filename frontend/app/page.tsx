@@ -1030,7 +1030,7 @@ export default function Home() {
   const [mobileDialogContent, setMobileDialogContent] = useState<"stamp-work" | "stamp-meeting" | "manual-entry" | "import" | null>(null);
   
   // Database-backed settings
-  const { settings, updateSettings: updateSettingsDb, mutate: mutateSettings } = useUserSettings();
+  const { settings, updateSettings: updateSettingsDb, mutate: mutateSettings, isLoading: settingsLoading } = useUserSettings();
   const { templates, createTemplate, deleteTemplate } = useQuickTemplates();
   const { projectInfo, isLoading: projectLoading } = useProjectInfo();
   
