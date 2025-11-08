@@ -250,7 +250,7 @@ export default function Setup() {
               required
               aria-label={t('project_info.client', 'Oppdragsgiver')}
             />
-            <Autocomplete
+            <Autocomplete<{ label: string; icon: JSX.Element }, false, false, true>
               freeSolo
               options={[
                 { label: 'Miljøarbeider', icon: <GroupIcon /> },
@@ -264,7 +264,7 @@ export default function Setup() {
                 if (typeof newValue === 'object' && newValue) {
                   setForm({ ...form, tiltak: newValue.label });
                 } else {
-                  setForm({ ...form, tiltak: newValue || '' });
+                  setForm({ ...form, tiltak: (newValue as string) || '' });
                 }
               }}
               onInputChange={(_, newValue) => setForm({ ...form, tiltak: newValue })}
