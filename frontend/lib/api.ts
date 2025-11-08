@@ -214,6 +214,8 @@ export type UserSettings = {
   view_mode?: 'month' | 'week' | null;
   show_archived?: boolean | null;
   language?: 'no' | 'en';
+  // Optional billing prefs
+  invoice_reminder_active?: boolean | null;
   created_at?: string;
   updated_at?: string;
 };
