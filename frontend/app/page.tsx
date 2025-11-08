@@ -1686,19 +1686,19 @@ export default function Home() {
                   {t('home.stamp_in', 'Stemple INN')}
                 </Button>
                 <Stack direction="row" spacing={1} flexWrap="wrap">
-                  {templates.map((t) => (
+                  {templates.map((tpl) => (
                     <Chip 
-                      key={t.id}
-                      label={t.label} 
+                      key={tpl.id}
+                      label={tpl.label} 
                       size="small" 
                       onClick={() => {
-                        setQuickActivity(t.activity);
-                        setQuickTitle(t.title || '');
-                        setQuickProject(t.project || '');
-                        setQuickPlace(t.place || '');
+                        setQuickActivity(tpl.activity);
+                        setQuickTitle(tpl.title || '');
+                        setQuickProject(tpl.project || '');
+                        setQuickPlace(tpl.place || '');
                       }}
                       clickable
-                      aria-label={`${t('aria.use_template', 'Bruk mal')}: ${t.label}`}
+                      aria-label={`${t('aria.use_template', 'Bruk mal')}: ${tpl.label}`}
                     />
                   ))}
                 </Stack>
