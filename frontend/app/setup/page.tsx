@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Box, Button, Card, CardContent, CardHeader, Container, Stack, TextField, Typography, CircularProgress, Autocomplete, Fade, MenuItem, ListItemIcon, ListItemText, FormControl, InputLabel, Select } from "@mui/material";
 import GroupIcon from '@mui/icons-material/Group';
@@ -250,7 +251,7 @@ export default function Setup() {
               required
               aria-label={t('project_info.client', 'Oppdragsgiver')}
             />
-            <Autocomplete<{ label: string; icon: JSX.Element }, false, false, true>
+            <Autocomplete<{ label: string; icon: ReactNode }, false, false, true>
               freeSolo
               options={[
                 { label: 'Miljøarbeider', icon: <GroupIcon /> },
