@@ -1,7 +1,7 @@
 "use client";
 import { useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { useTranslations } from '@/contexts/TranslationsContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useTranslations } from '../../contexts/TranslationsContext';
 import { Box, Container, Paper, Typography } from '@mui/material';
 import { useRouter } from 'next/navigation';
 
