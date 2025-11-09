@@ -1,18 +1,7 @@
-# Ignore environment files
-.env
-
-# Frontend build artifacts
-frontend/.next
-frontend/node_modules
-frontend/.env.local
+node_modules
+.next
+.env.local
 .vercel
-
-# Node modules
-node_modules/
-package-lock.json
-
-# Logs
 *.log
 npm-debug.log*
-
-.env.production
+package-lock.json
