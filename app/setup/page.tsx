@@ -272,13 +272,15 @@ export default function Setup() {
                 }
               }}
               onInputChange={(_, newValue) => setForm({ ...form, tiltak: newValue })}
-              getOptionLabel={(option: string | { label: string }) => typeof option === 'string' ? option : option.label}
-              renderOption={(props, option) => (
-                <Box component="li" {...props} key={option.label} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  {option.icon}
-                  <Typography>{option.label}</Typography>
-                </Box>
-              )}
+              renderOption={(props, option) => {
+                if (typeof option === 'string') return null;
+                return (
+                  <Box component="li" {...props} key={option.label} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {option.icon}
+                    <Typography>{option.label}</Typography>
+                  </Box>
+                );
+              }}
               renderInput={(params) => (
                 <TextField
                   {...params}
