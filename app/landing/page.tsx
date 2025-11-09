@@ -277,12 +277,24 @@ function LoginDialog({ open, onClose, type }: { open: boolean; onClose: () => vo
   const { t } = useTranslations();
   const { login } = useAuth();
   const router = useRouter();
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [tabValue, setTabValue] = useState(0);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
+  const [requestSubmitted, setRequestSubmitted] = useState(false);
+  const [companyForm, setCompanyForm] = useState({
+    name: '',
+    orgnr: '',
+    contact_email: '',
+    contact_phone: '',
+    address_line: '',
+    postal_code: '',
+    city: '',
+    requester_email: '',
+  });
 
   const handleGoogleLogin = () => {
     if (type === 'portal') {
@@ -342,19 +354,118 @@ function LoginDialog({ open, onClose, type }: { open: boolean; onClose: () => vo
     }
   };
 
+  const handleCompanyRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE}/api/company-requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(companyForm),
+      });
+      if (!response.ok) throw new Error('Failed to submit company request');
+      setRequestSubmitted(true);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to submit request');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const title = type === 'portal' 
-    ? t('portal.login.title', 'Bedriftsportal - Logg inn') 
+    ? (mode === 'register' ? t('portal.register.title', 'Registrer ny bedrift') : t('portal.login.title', 'Bedriftsportal - Logg inn'))
     : t('login.title', 'Logg inn');
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{title}</DialogTitle>
+      <DialogTitle>
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Typography variant="h6">{title}</Typography>
+          {type === 'portal' && !requestSubmitted && !emailSent && (
+            <Button size="small" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>
+              {mode === 'login' ? t('portal.new_company', 'Ny bedrift?') : t('common.back_to_login', 'Tilbake til innlogging')}
+            </Button>
+          )}
+        </Stack>
+      </DialogTitle>
       <DialogContent>
         <Stack spacing={3} sx={{ mt: 1 }}>
-          {emailSent ? (
+          {requestSubmitted ? (
+            <Alert severity="success">
+              {t('portal.request_submitted', 'Takk! Vi har mottatt forespørselen din. Du vil få svar på e-post når bedriften din er godkjent.')}
+            </Alert>
+          ) : emailSent ? (
             <Alert severity="success">
               {t('login.email_sent', 'Vi har sendt deg en innloggingslenke på e-post. Sjekk innboksen din.')}
             </Alert>
+          ) : mode === 'register' && type === 'portal' ? (
+            <Box component="form" onSubmit={handleCompanyRequest}>
+              <Stack spacing={2}>
+                <Typography variant="body2" color="text.secondary">
+                  {t('portal.register_hint', 'Fyll ut skjemaet under for å registrere din bedrift. Vi vil gjennomgå forespørselen og kontakte deg.')}
+                </Typography>
+                <TextField
+                  label={t('fields.company_name', 'Bedriftsnavn')}
+                  value={companyForm.name}
+                  onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
+                  required
+                  fullWidth
+                />
+                <TextField
+                  label={t('fields.org_number', 'Organisasjonsnummer')}
+                  value={companyForm.orgnr}
+                  onChange={(e) => setCompanyForm({ ...companyForm, orgnr: e.target.value })}
+                  fullWidth
+                  helperText={t('fields.org_number_optional', 'Valgfritt')}
+                />
+                <TextField
+                  type="email"
+                  label={t('fields.contact_email', 'Kontakt e-post')}
+                  value={companyForm.contact_email}
+                  onChange={(e) => setCompanyForm({ ...companyForm, contact_email: e.target.value })}
+                  fullWidth
+                />
+                <TextField
+                  label={t('fields.contact_phone', 'Telefon')}
+                  value={companyForm.contact_phone}
+                  onChange={(e) => setCompanyForm({ ...companyForm, contact_phone: e.target.value })}
+                  fullWidth
+                />
+                <TextField
+                  label={t('fields.address', 'Adresse')}
+                  value={companyForm.address_line}
+                  onChange={(e) => setCompanyForm({ ...companyForm, address_line: e.target.value })}
+                  fullWidth
+                />
+                <Stack direction="row" spacing={2}>
+                  <TextField
+                    label={t('fields.postal_code', 'Postnummer')}
+                    value={companyForm.postal_code}
+                    onChange={(e) => setCompanyForm({ ...companyForm, postal_code: e.target.value })}
+                    sx={{ width: '30%' }}
+                  />
+                  <TextField
+                    label={t('fields.city', 'By')}
+                    value={companyForm.city}
+                    onChange={(e) => setCompanyForm({ ...companyForm, city: e.target.value })}
+                    sx={{ flex: 1 }}
+                  />
+                </Stack>
+                <TextField
+                  type="email"
+                  label={t('fields.your_email', 'Din e-post')}
+                  value={companyForm.requester_email}
+                  onChange={(e) => setCompanyForm({ ...companyForm, requester_email: e.target.value })}
+                  required
+                  fullWidth
+                  helperText={t('fields.your_email_hint', 'Vi sender bekreftelse og oppdateringer til denne e-posten')}
+                />
+                <Button type="submit" variant="contained" fullWidth disabled={busy}>
+                  {t('portal.submit_request', 'Send forespørsel')}
+                </Button>
+              </Stack>
+            </Box>
           ) : (
             <>
               <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} centered>
