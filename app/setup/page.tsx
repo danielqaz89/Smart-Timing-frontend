@@ -244,7 +244,6 @@ export default function Setup() {
                   </Box>
                 );
               }}
-              )}
             />
             <TextField 
               label={t('project_info.client', 'Oppdragsgiver')} 
