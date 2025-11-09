@@ -2,6 +2,3 @@ node_modules
 .next
 .env.local
 .vercel
-*.log
-npm-debug.log*
-package-lock.json

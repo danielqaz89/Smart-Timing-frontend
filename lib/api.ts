@@ -214,7 +214,6 @@ export type UserSettings = {
   show_archived?: boolean | null;
   language?: 'no' | 'en';
   theme_mode?: 'light' | 'dark';
-  view_mode?: 'month' | 'week';
   invoice_reminder_active?: boolean;
   reminder_day?: number;
   reminder_hour?: number;
@@ -265,8 +264,7 @@ export { searchBrregCompany, getBrregCompanyByOrgnr, KINOA_TILTAK_AS } from './b
 
 // ===== CMS PAGES/THEME =====
 export async function fetchCmsPage(pageId: string): Promise<any> {
-  // Use public endpoint for published pages (no auth required)
-  const res = await fetch(`${API_BASE}/api/cms/pages/public/${encodeURIComponent(pageId)}`, { cache: 'no-store' });
+  const res = await fetch(`${API_BASE}/api/admin/cms/pages/${encodeURIComponent(pageId)}`, { cache: 'no-store' });
   if (!res.ok) throw new Error('Failed to load CMS page');
   return res.json();
 }

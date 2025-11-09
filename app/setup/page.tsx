@@ -203,7 +203,7 @@ export default function Setup() {
             <Autocomplete
               freeSolo
               options={brregOptions}
-              getOptionLabel={(option: string | BrregCompany) => typeof option === 'string' ? option : `${option.navn} (${option.organisasjonsnummer})`}
+              getOptionLabel={(option) => typeof option === 'string' ? option : `${option.navn} (${option.organisasjonsnummer})`}
               inputValue={form.bedrift}
               onInputChange={(_, newValue) => setForm({ ...form, bedrift: newValue })}
               onChange={(_, newValue) => {
@@ -230,20 +230,17 @@ export default function Setup() {
                   }}
                 />
               )}
-              renderOption={(props, option) => {
-                if (typeof option === 'string') return null;
-                return (
-                  <Box component="li" {...props} key={option.organisasjonsnummer}>
-                    <Stack>
-                      <Typography variant="body2">{option.navn}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {t('setup.org_number', 'Org.nr:')} {option.organisasjonsnummer}
-                        {option.organisasjonsform && ` • ${option.organisasjonsform.beskrivelse}`}
-                      </Typography>
-                    </Stack>
-                  </Box>
-                );
-              }}
+              renderOption={(props, option) => (
+                <Box component="li" {...props} key={option.organisasjonsnummer}>
+                  <Stack>
+                    <Typography variant="body2">{option.navn}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {t('setup.org_number', 'Org.nr:')} {option.organisasjonsnummer}
+                      {option.organisasjonsform && ` • ${option.organisasjonsform.beskrivelse}`}
+                    </Typography>
+                  </Stack>
+                </Box>
+              )}
             />
             <TextField 
               label={t('project_info.client', 'Oppdragsgiver')} 
@@ -255,32 +252,29 @@ export default function Setup() {
             />
             <Autocomplete
               freeSolo
-              getOptionLabel={(option: string | { label: string; icon?: React.ReactElement }) => typeof option === 'string' ? option : option.label}
-              options={([
+              options={[
                 { label: 'Miljøarbeider', icon: <GroupIcon /> },
                 { label: 'Sosialarbeider', icon: <PsychologyIcon /> },
                 { label: 'Aktivitør', icon: <SportsIcon /> },
                 { label: 'Miljøterapeut', icon: <NatureIcon /> },
                 { label: 'Tiltaksleder', icon: <ManageAccountsIcon /> },
-              ] as Array<string | { label: string; icon?: React.ReactElement }>)}
+              ]}
               value={form.tiltak}
               onChange={(_, newValue) => {
-                if (typeof newValue === 'object' && newValue && 'label' in newValue) {
+                if (typeof newValue === 'object' && newValue) {
                   setForm({ ...form, tiltak: newValue.label });
-                } else if (typeof newValue === 'string') {
-                  setForm({ ...form, tiltak: newValue });
+                } else {
+                  setForm({ ...form, tiltak: newValue || '' });
                 }
               }}
               onInputChange={(_, newValue) => setForm({ ...form, tiltak: newValue })}
-              renderOption={(props, option) => {
-                if (typeof option === 'string') return null;
-                return (
-                  <Box component="li" {...props} key={option.label} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {option.icon}
-                    <Typography>{option.label}</Typography>
-                  </Box>
-                );
-              }}
+              getOptionLabel={(option) => typeof option === 'string' ? option : option.label}
+              renderOption={(props, option) => (
+                <Box component="li" {...props} key={option.label} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {option.icon}
+                  <Typography>{option.label}</Typography>
+                </Box>
+              )}
               renderInput={(params) => (
                 <TextField
                   {...params}

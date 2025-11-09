@@ -15,6 +15,7 @@
     "@mui/icons-material": "^5.15.20",
     "@mui/material": "^5.15.20",
     "@tanstack/react-virtual": "^3.0.0-beta.65",
+    "date-fns": "^4.1.0",
     "dayjs": "^1.11.11",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.3",
@@ -23,6 +24,7 @@
     "notistack": "^3.0.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "react-quill": "^2.0.0",
     "react-virtuoso": "^4.14.1",
     "recharts": "^3.3.0",
     "swr": "^2.2.5"

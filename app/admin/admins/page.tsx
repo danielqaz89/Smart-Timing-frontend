@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Alert, Chip, IconButton, type ChipProps } from '@mui/material';
-import { Add, Delete, Edit, Visibility, VisibilityOff } from '@mui/icons-material';
+import { Add, Delete, Edit } from '@mui/icons-material';
 import { TableVirtuoso } from 'react-virtuoso';
 import { AdminProvider, useAdmin } from '../../../contexts/AdminContext';
 import AdminLayout from '../../../components/AdminLayout';
