@@ -2150,45 +2150,44 @@ export default function Home() {
           <AccordionDetails>
             <Grid container spacing={{ xs: 3, sm: 2 }}>
               <Grid item xs={12}>
-        <Grid item xs={12}>
-          <LazyMount>
-            <TemplateManager
-              templates={templates}
-              onCreate={createTemplate}
-              onDelete={deleteTemplate}
-              onToast={showToast}
-            />
-          </LazyMount>
-        </Grid>
-        <Grid item xs={12} ref={importRef}>
-          <LazyMount>
-            <Card>
-              <CardHeader title={t('home.files_import', 'Importer timeplan (CSV)')} />
-              <CardContent>
-                <CsvImport onImported={async () => { await mutate(); }} onToast={showToast} />
-              </CardContent>
-            </Card>
-          </LazyMount>
+                <LazyMount>
+                  <TemplateManager
+                    templates={templates}
+                    onCreate={createTemplate}
+                    onDelete={deleteTemplate}
+                    onToast={showToast}
+                  />
+                </LazyMount>
+              </Grid>
+              <Grid item xs={12} ref={importRef}>
+                <LazyMount>
+                  <Card>
+                    <CardHeader title={t('home.files_import', 'Importer timeplan (CSV)')} />
+                    <CardContent>
+                      <CsvImport onImported={async () => { await mutate(); }} onToast={showToast} />
+                    </CardContent>
+                  </Card>
+                </LazyMount>
               </Grid>
               <Grid item xs={12}>
-          <LazyMount>
-            <Card>
-              <CardHeader title={t('home.google_sheets_webhook', 'Google Sheets Webhook (toveis)')} />
-              <CardContent>
-                <WebhookSection onImported={async () => { await mutate(); }} onToast={showToast} settings={settings} updateSettings={updateSettings} />
-              </CardContent>
-            </Card>
-          </LazyMount>
+                <LazyMount>
+                  <Card>
+                    <CardHeader title={t('home.google_sheets_webhook', 'Google Sheets Webhook (toveis)')} />
+                    <CardContent>
+                      <WebhookSection onImported={async () => { await mutate(); }} onToast={showToast} settings={settings} updateSettings={updateSettings} />
+                    </CardContent>
+                  </Card>
+                </LazyMount>
               </Grid>
               <Grid item xs={12}>
-          <LazyMount>
-            <Card>
-              <CardHeader title={t('home.add_workdays_month', 'Legg inn hverdager for måned')} />
-              <CardContent>
-                <MonthBulk onDone={async () => { await mutate(); }} onToast={showToast} />
-              </CardContent>
-            </Card>
-          </LazyMount>
+                <LazyMount>
+                  <Card>
+                    <CardHeader title={t('home.add_workdays_month', 'Legg inn hverdager for måned')} />
+                    <CardContent>
+                      <MonthBulk onDone={async () => { await mutate(); }} onToast={showToast} />
+                    </CardContent>
+                  </Card>
+                </LazyMount>
               </Grid>
             </Grid>
           </AccordionDetails>
