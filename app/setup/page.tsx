@@ -256,19 +256,19 @@ export default function Setup() {
             <Autocomplete
               freeSolo
               getOptionLabel={(option: string | { label: string; icon?: React.ReactElement }) => typeof option === 'string' ? option : option.label}
-              options={[
+              options={([
                 { label: 'Miljøarbeider', icon: <GroupIcon /> },
                 { label: 'Sosialarbeider', icon: <PsychologyIcon /> },
                 { label: 'Aktivitør', icon: <SportsIcon /> },
                 { label: 'Miljøterapeut', icon: <NatureIcon /> },
                 { label: 'Tiltaksleder', icon: <ManageAccountsIcon /> },
-              ]}
+              ] as Array<string | { label: string; icon?: React.ReactElement }>)}
               value={form.tiltak}
               onChange={(_, newValue) => {
-                if (typeof newValue === 'object' && newValue) {
+                if (typeof newValue === 'object' && newValue && 'label' in newValue) {
                   setForm({ ...form, tiltak: newValue.label });
-                } else {
-                  setForm({ ...form, tiltak: newValue || '' });
+                } else if (typeof newValue === 'string') {
+                  setForm({ ...form, tiltak: newValue });
                 }
               }}
               onInputChange={(_, newValue) => setForm({ ...form, tiltak: newValue })}
