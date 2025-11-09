@@ -230,16 +230,20 @@ export default function Setup() {
                   }}
                 />
               )}
-              renderOption={(props, option) => (
-                <Box component="li" {...props} key={option.organisasjonsnummer}>
-                  <Stack>
-                    <Typography variant="body2">{option.navn}</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {t('setup.org_number', 'Org.nr:')} {option.organisasjonsnummer}
-                      {option.organisasjonsform && ` • ${option.organisasjonsform.beskrivelse}`}
-                    </Typography>
-                  </Stack>
-                </Box>
+              renderOption={(props, option) => {
+                if (typeof option === 'string') return null;
+                return (
+                  <Box component="li" {...props} key={option.organisasjonsnummer}>
+                    <Stack>
+                      <Typography variant="body2">{option.navn}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {t('setup.org_number', 'Org.nr:')} {option.organisasjonsnummer}
+                        {option.organisasjonsform && ` • ${option.organisasjonsform.beskrivelse}`}
+                      </Typography>
+                    </Stack>
+                  </Box>
+                );
+              }}
               )}
             />
             <TextField 
