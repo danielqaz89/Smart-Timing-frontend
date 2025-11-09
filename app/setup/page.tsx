@@ -202,7 +202,6 @@ export default function Setup() {
             />
             <Autocomplete
               freeSolo
-              getOptionLabel={(option) => typeof option === 'string' ? option : option.label}
               options={brregOptions}
               getOptionLabel={(option) => typeof option === 'string' ? option : `${option.navn} (${option.organisasjonsnummer})`}
               inputValue={form.bedrift}
