@@ -1,14 +1,18 @@
 "use client";
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { fetchCmsPage, submitContactForm, API_BASE } from '../../lib/api';
-import { Box, Button, Container, Grid, Link as MuiLink, Stack, TextField, Typography, Checkbox, FormControlLabel, Alert } from '@mui/material';
+import { Box, Button, Container, Grid, Link as MuiLink, Stack, TextField, Typography, Checkbox, FormControlLabel, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Tabs, Tab } from '@mui/material';
 import { useTranslations } from '../../contexts/TranslationsContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function LandingPage() {
   const [page, setPage] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { t } = useTranslations();
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [loginType, setLoginType] = useState<'user' | 'portal'>('user');
 
   useEffect(() => {
     (async () => {
@@ -28,18 +32,37 @@ export default function LandingPage() {
 
   const sections: any[] = Array.isArray(page?.sections) ? page.sections : [];
 
+  const handleCTAClick = (href: string, e: React.MouseEvent) => {
+    // Intercept clicks to /app and /portal/login to show dialogs
+    if (href === '/app' || href === '#app' || href === '#kom-i-gang') {
+      e.preventDefault();
+      setLoginType('user');
+      setLoginDialogOpen(true);
+    } else if (href === '/portal/login' || href === '#portal' || href === '#bedriftsportal') {
+      e.preventDefault();
+      setLoginType('portal');
+      setLoginDialogOpen(true);
+    }
+  };
+
   return (
     <Container maxWidth="lg" sx={{ py: 6 }}>
       {sections.sort((a,b)=> (a.order||0)-(b.order||0)).map((s) => (
         <Box key={s.id} sx={{ py: 6 }}>
-          {renderSection(s, t)}
+          {renderSection(s, t, handleCTAClick)}
         </Box>
       ))}
+      
+      <LoginDialog 
+        open={loginDialogOpen} 
+        onClose={() => setLoginDialogOpen(false)}
+        type={loginType}
+      />
     </Container>
   );
 }
 
-function renderSection(s: any, t: any) {
+function renderSection(s: any, t: any, onCTAClick: (href: string, e: React.MouseEvent) => void) {
   const c = s?.content || {};
   switch (s?.type) {
     case 'hero':
@@ -48,8 +71,24 @@ function renderSection(s: any, t: any) {
           <Typography variant="h2" fontWeight={800}>{c.title}</Typography>
           {c.subtitle && <Typography variant="h6" color="text.secondary">{c.subtitle}</Typography>}
           <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-            {c.cta_primary_text && <Button href={c.cta_primary_link || '#'} variant="contained" size="large">{c.cta_primary_text}</Button>}
-            {c.cta_secondary_text && <Button href={c.cta_secondary_link || '#'} variant="outlined" size="large">{c.cta_secondary_text}</Button>}
+            {c.cta_primary_text && (
+              <Button 
+                onClick={(e) => onCTAClick(c.cta_primary_link || '#', e)}
+                variant="contained" 
+                size="large"
+              >
+                {c.cta_primary_text}
+              </Button>
+            )}
+            {c.cta_secondary_text && (
+              <Button 
+                onClick={(e) => onCTAClick(c.cta_secondary_link || '#', e)}
+                variant="outlined" 
+                size="large"
+              >
+                {c.cta_secondary_text}
+              </Button>
+            )}
           </Stack>
         </Stack>
       );
@@ -75,8 +114,22 @@ function renderSection(s: any, t: any) {
         <Stack spacing={2} alignItems="center" textAlign="center" sx={{ p: 4, border: '1px dashed', borderColor: 'divider', borderRadius: 2 }}>
           <Typography variant="h4" fontWeight={800}>{c.title}</Typography>
           <Stack direction="row" spacing={2}>
-            {c.primary?.text && <Button href={c.primary?.href || '#'} variant="contained">{c.primary.text}</Button>}
-            {c.secondary?.text && <Button href={c.secondary?.href || '#'} variant="outlined">{c.secondary.text}</Button>}
+            {c.primary?.text && (
+              <Button 
+                onClick={(e) => onCTAClick(c.primary?.href || '#', e)}
+                variant="contained"
+              >
+                {c.primary.text}
+              </Button>
+            )}
+            {c.secondary?.text && (
+              <Button 
+                onClick={(e) => onCTAClick(c.secondary?.href || '#', e)}
+                variant="outlined"
+              >
+                {c.secondary.text}
+              </Button>
+            )}
           </Stack>
         </Stack>
       );
@@ -217,5 +270,172 @@ function ContactForm({ section }: { section: any }) {
         {error && <Typography color="error">{error}</Typography>}
       </Stack>
     </Box>
+  );
+}
+
+function LoginDialog({ open, onClose, type }: { open: boolean; onClose: () => void; type: 'user' | 'portal' }) {
+  const { t } = useTranslations();
+  const { login } = useAuth();
+  const router = useRouter();
+  const [tabValue, setTabValue] = useState(0);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
+
+  const handleGoogleLogin = () => {
+    if (type === 'portal') {
+      window.location.href = `${API_BASE}/api/auth/google/portal`;
+    } else {
+      login(); // Uses regular Google OAuth
+    }
+  };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const endpoint = type === 'portal' ? '/api/portal/auth/email' : '/api/auth/email';
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (!response.ok) throw new Error('Failed to send login email');
+      setEmailSent(true);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to send login email');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const endpoint = type === 'portal' ? '/api/portal/auth/login' : '/api/auth/login';
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!response.ok) throw new Error('Login failed');
+      const data = await response.json();
+      
+      // Store auth and redirect
+      if (type === 'portal') {
+        localStorage.setItem('portal_token', data.token);
+        router.push('/portal/dashboard');
+      } else {
+        localStorage.setItem('smart_timing_user', JSON.stringify(data.user));
+        router.push('/app');
+      }
+      onClose();
+    } catch (e: any) {
+      setError(e?.message || 'Login failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const title = type === 'portal' 
+    ? t('portal.login.title', 'Bedriftsportal - Logg inn') 
+    : t('login.title', 'Logg inn');
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={3} sx={{ mt: 1 }}>
+          {emailSent ? (
+            <Alert severity="success">
+              {t('login.email_sent', 'Vi har sendt deg en innloggingslenke på e-post. Sjekk innboksen din.')}
+            </Alert>
+          ) : (
+            <>
+              <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} centered>
+                <Tab label={t('login.google', 'Google')} />
+                <Tab label={t('login.email', 'E-post')} />
+                <Tab label={t('login.password', 'Passord')} />
+              </Tabs>
+              
+              {tabValue === 0 && (
+                <Stack spacing={2} alignItems="center">
+                  <Typography variant="body2" color="text.secondary" textAlign="center">
+                    {t('login.google_hint', 'Logg inn med Google-kontoen din')}
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    onClick={handleGoogleLogin}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    {t('login.continue_google', 'Fortsett med Google')}
+                  </Button>
+                </Stack>
+              )}
+
+              {tabValue === 1 && (
+                <Box component="form" onSubmit={handleEmailLogin}>
+                  <Stack spacing={2}>
+                    <Typography variant="body2" color="text.secondary">
+                      {t('login.email_hint', 'Vi sender deg en magisk lenke for å logge inn')}
+                    </Typography>
+                    <TextField
+                      type="email"
+                      label={t('fields.email', 'E-post')}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      fullWidth
+                      autoFocus
+                    />
+                    <Button type="submit" variant="contained" fullWidth disabled={busy}>
+                      {t('login.send_link', 'Send innloggingslenke')}
+                    </Button>
+                  </Stack>
+                </Box>
+              )}
+
+              {tabValue === 2 && (
+                <Box component="form" onSubmit={handlePasswordLogin}>
+                  <Stack spacing={2}>
+                    <TextField
+                      type="email"
+                      label={t('fields.email', 'E-post')}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      fullWidth
+                      autoFocus
+                    />
+                    <TextField
+                      type="password"
+                      label={t('fields.password', 'Passord')}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      fullWidth
+                    />
+                    <Button type="submit" variant="contained" fullWidth disabled={busy}>
+                      {t('common.login', 'Logg inn')}
+                    </Button>
+                  </Stack>
+                </Box>
+              )}
+
+              {error && <Alert severity="error">{error}</Alert>}
+            </>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t('common.cancel', 'Avbryt')}</Button>
+      </DialogActions>
+    </Dialog>
   );
 }
