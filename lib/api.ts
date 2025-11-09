@@ -214,6 +214,7 @@ export type UserSettings = {
   show_archived?: boolean | null;
   language?: 'no' | 'en';
   theme_mode?: 'light' | 'dark';
+  view_mode?: 'month' | 'week';
   invoice_reminder_active?: boolean;
   reminder_day?: number;
   reminder_hour?: number;
