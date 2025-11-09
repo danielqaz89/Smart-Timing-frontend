@@ -152,6 +152,7 @@ function renderSection(s: any, t: any) {
 }
 
 function ContactForm({ section }: { section: any }) {
+  const { t } = useTranslations();
   const c = section?.content || {};
   const fields: any[] = Array.isArray(c.fields) ? c.fields : [];
   const [values, setValues] = useState<Record<string, any>>({});
