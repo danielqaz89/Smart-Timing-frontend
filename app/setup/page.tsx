@@ -203,7 +203,7 @@ export default function Setup() {
             <Autocomplete
               freeSolo
               options={brregOptions}
-              getOptionLabel={(option) => typeof option === 'string' ? option : `${option.navn} (${option.organisasjonsnummer})`}
+              getOptionLabel={(option: string | { label: string }) => typeof option === 'string' ? option : `${option.navn} (${option.organisasjonsnummer})`}
               inputValue={form.bedrift}
               onInputChange={(_, newValue) => setForm({ ...form, bedrift: newValue })}
               onChange={(_, newValue) => {
@@ -252,7 +252,7 @@ export default function Setup() {
             />
             <Autocomplete
               freeSolo
-              getOptionLabel={(option) => typeof option === 'string' ? option : option.label}
+              getOptionLabel={(option: string | { label: string }) => typeof option === 'string' ? option : option.label}
               options={[
                 { label: 'Miljøarbeider', icon: <GroupIcon /> },
                 { label: 'Sosialarbeider', icon: <PsychologyIcon /> },
@@ -269,7 +269,7 @@ export default function Setup() {
                 }
               }}
               onInputChange={(_, newValue) => setForm({ ...form, tiltak: newValue })}
-              getOptionLabel={(option) => typeof option === 'string' ? option : option.label}
+              getOptionLabel={(option: string | { label: string }) => typeof option === 'string' ? option : option.label}
               renderOption={(props, option) => (
                 <Box component="li" {...props} key={option.label} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   {option.icon}
