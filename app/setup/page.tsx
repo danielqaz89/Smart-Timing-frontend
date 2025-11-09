@@ -255,7 +255,7 @@ export default function Setup() {
             />
             <Autocomplete
               freeSolo
-              getOptionLabel={(option: string | { label: string }) => typeof option === 'string' ? option : option.label}
+              getOptionLabel={(option: string | { label: string; icon?: JSX.Element }) => typeof option === 'string' ? option : option.label}
               options={[
                 { label: 'Miljøarbeider', icon: <GroupIcon /> },
                 { label: 'Sosialarbeider', icon: <PsychologyIcon /> },
