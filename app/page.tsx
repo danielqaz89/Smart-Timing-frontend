@@ -1028,7 +1028,7 @@ export default function Home() {
   const [mobileDialogContent, setMobileDialogContent] = useState<"stamp-work" | "stamp-meeting" | "manual-entry" | "import" | null>(null);
   
   // Database-backed settings
-  const { settings, updateSettings: updateSettingsDb, mutate: mutateSettings } = useUserSettings();
+  const { settings, updateSettings: updateSettingsDb, mutate: mutateSettings, isLoading: settingsLoading } = useUserSettings();
   const { templates, createTemplate, deleteTemplate } = useQuickTemplates();
   const { projectInfo, isLoading: projectLoading } = useProjectInfo();
   
@@ -1237,7 +1237,7 @@ export default function Home() {
       if (!Number.isFinite(diffHours) || diffHours <= 0) return sum;
       return sum + diffHours;
     }, 0);
-  }, [logs, paidBreak]);
+  }, [logs, paidBreakLocal]);
   
   const totalExpenses = useMemo(() => {
     return logs.reduce((sum, r) => {
@@ -1682,19 +1682,19 @@ export default function Home() {
                   {t('home.stamp_in', 'Stemple INN')}
                 </Button>
                 <Stack direction="row" spacing={1} flexWrap="wrap">
-                  {templates.map((t) => (
+                  {templates.map((tpl) => (
                     <Chip 
-                      key={t.id}
-                      label={t.label} 
+                      key={tpl.id}
+                      label={tpl.label} 
                       size="small" 
                       onClick={() => {
-                        setQuickActivity(t.activity);
-                        setQuickTitle(t.title || '');
-                        setQuickProject(t.project || '');
-                        setQuickPlace(t.place || '');
+                        setQuickActivity(tpl.activity);
+                        setQuickTitle(tpl.title || '');
+                        setQuickProject(tpl.project || '');
+                        setQuickPlace(tpl.place || '');
                       }}
                       clickable
-                      aria-label={`${t('aria.use_template', 'Bruk mal')}: ${t.label}`}
+                      aria-label={`${t('aria.use_template', 'Bruk mal')}: ${tpl.label}`}
                     />
                   ))}
                 </Stack>
@@ -2249,7 +2249,7 @@ updateSettings({ show_archived: v }).catch(() => void 0);
                           <IconButton aria-label={t('aria.edit_row', 'Rediger rad')} size="small" onClick={() => startEdit(r)}>
                             <EditIcon fontSize="small" />
                           </IconButton>
-                          {!showArchived ? (
+                          {!showArchivedLocal ? (
                             <IconButton
                               aria-label={t('aria.archive_row', 'Arkiver rad')}
                               size="small"

@@ -76,13 +76,13 @@ function CasesContent() {
   );
 
   const VirtuosoTableComponents = {
-    Scroller: React.forwardRef((props, ref) => (
+    Scroller: React.forwardRef<HTMLDivElement>((props, ref) => (
       <div {...props} ref={ref} style={{ overflowX: 'auto' }} />
     )),
     Table: (props) => <table {...props} style={{ borderCollapse: 'collapse', width: '100%' }} />,
-    TableHead: React.forwardRef((props, ref) => <thead {...props} ref={ref} />),
+    TableHead: React.forwardRef<HTMLTableSectionElement>((props, ref) => <thead {...props} ref={ref} />),
     TableRow: (props) => <tr {...props} style={{ borderBottom: '1px solid #e0e0e0' }} />,
-    TableBody: React.forwardRef((props, ref) => <tbody {...props} ref={ref} />),
+    TableBody: React.forwardRef<HTMLTableSectionElement>((props, ref) => <tbody {...props} ref={ref} />),
   };
 
   return (
