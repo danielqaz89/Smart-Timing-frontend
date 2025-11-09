@@ -5,17 +5,22 @@ import { fetchCmsPage, submitContactForm, API_BASE } from '../../lib/api';
 import { Box, Button, Container, Grid, Link as MuiLink, Stack, TextField, Typography, Checkbox, FormControlLabel, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Tabs, Tab } from '@mui/material';
 import { useTranslations } from '../../contexts/TranslationsContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export default function LandingPage() {
   const [page, setPage] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { t } = useTranslations();
+  const { language } = useLanguage();
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginType, setLoginType] = useState<'user' | 'portal'>('user');
 
+  // Reload CMS content when language changes
   useEffect(() => {
     (async () => {
+      setLoading(true);
+      setError(null);
       try {
         const data = await fetchCmsPage('landing');
         setPage(data);
@@ -25,7 +30,7 @@ export default function LandingPage() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [language]); // Reload when language changes
 
   if (loading) return <Container sx={{ py: 6 }}><Typography>{t('landing.loading', 'Laster...')}</Typography></Container>;
   if (error) return <Container sx={{ py: 6 }}><Typography color="error">{error || t('landing.error', 'Kunne ikke laste siden')}</Typography></Container>;

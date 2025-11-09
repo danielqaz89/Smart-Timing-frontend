@@ -265,7 +265,8 @@ export { searchBrregCompany, getBrregCompanyByOrgnr, KINOA_TILTAK_AS } from './b
 
 // ===== CMS PAGES/THEME =====
 export async function fetchCmsPage(pageId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/api/admin/cms/pages/${encodeURIComponent(pageId)}`, { cache: 'no-store' });
+  // Use public endpoint for published pages (no auth required)
+  const res = await fetch(`${API_BASE}/api/cms/pages/public/${encodeURIComponent(pageId)}`, { cache: 'no-store' });
   if (!res.ok) throw new Error('Failed to load CMS page');
   return res.json();
 }
