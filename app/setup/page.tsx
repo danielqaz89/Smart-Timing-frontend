@@ -203,7 +203,7 @@ export default function Setup() {
             <Autocomplete
               freeSolo
               options={brregOptions}
-              getOptionLabel={(option: string | { label: string }) => typeof option === 'string' ? option : `${option.navn} (${option.organisasjonsnummer})`}
+              getOptionLabel={(option: string | BrregCompany) => typeof option === 'string' ? option : `${option.navn} (${option.organisasjonsnummer})`}
               inputValue={form.bedrift}
               onInputChange={(_, newValue) => setForm({ ...form, bedrift: newValue })}
               onChange={(_, newValue) => {
