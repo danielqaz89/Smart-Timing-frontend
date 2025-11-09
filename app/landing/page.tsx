@@ -69,29 +69,43 @@ export default function LandingPage() {
 
 function renderSection(s: any, t: any, onCTAClick: (href: string, e: React.MouseEvent) => void) {
   const c = s?.content || {};
+  
+  // Helper function to get translated text - checks for *_key field first, falls back to direct text
+  const getText = (keyField: string, textField: string) => {
+    const translationKey = c[keyField];
+    const fallbackText = c[textField];
+    return translationKey ? t(translationKey, fallbackText) : fallbackText;
+  };
+  
   switch (s?.type) {
     case 'hero':
       return (
         <Stack spacing={2} alignItems="center" textAlign="center">
-          <Typography variant="h2" fontWeight={800}>{c.title}</Typography>
-          {c.subtitle && <Typography variant="h6" color="text.secondary">{c.subtitle}</Typography>}
+          <Typography variant="h2" fontWeight={800}>
+            {getText('title_key', 'title')}
+          </Typography>
+          {(c.subtitle_key || c.subtitle) && (
+            <Typography variant="h6" color="text.secondary">
+              {getText('subtitle_key', 'subtitle')}
+            </Typography>
+          )}
           <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-            {c.cta_primary_text && (
+            {(c.cta_primary_text_key || c.cta_primary_text) && (
               <Button 
                 onClick={(e) => onCTAClick(c.cta_primary_link || '#', e)}
                 variant="contained" 
                 size="large"
               >
-                {c.cta_primary_text}
+                {getText('cta_primary_text_key', 'cta_primary_text')}
               </Button>
             )}
-            {c.cta_secondary_text && (
+            {(c.cta_secondary_text_key || c.cta_secondary_text) && (
               <Button 
                 onClick={(e) => onCTAClick(c.cta_secondary_link || '#', e)}
                 variant="outlined" 
                 size="large"
               >
-                {c.cta_secondary_text}
+                {getText('cta_secondary_text_key', 'cta_secondary_text')}
               </Button>
             )}
           </Stack>
@@ -100,39 +114,52 @@ function renderSection(s: any, t: any, onCTAClick: (href: string, e: React.Mouse
     case 'features':
       return (
         <Stack spacing={3}>
-          <Typography variant="h4" fontWeight={700}>{c.title}</Typography>
+          <Typography variant="h4" fontWeight={700}>
+            {getText('title_key', 'title')}
+          </Typography>
           <Grid container spacing={2}>
-            {(c.features || []).map((f: any, i: number) => (
-              <Grid key={i} item xs={12} sm={6} md={4}>
-                <Stack spacing={1} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-                  <Typography variant="h3" component="div">{f.icon}</Typography>
-                  <Typography variant="h6" fontWeight={700}>{f.title}</Typography>
-                  <Typography color="text.secondary">{f.description}</Typography>
-                </Stack>
-              </Grid>
-            ))}
+            {(c.features || []).map((f: any, i: number) => {
+              const getFeatureText = (keyField: string, textField: string) => {
+                return f[keyField] ? t(f[keyField], f[textField]) : f[textField];
+              };
+              return (
+                <Grid key={i} item xs={12} sm={6} md={4}>
+                  <Stack spacing={1} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                    <Typography variant="h3" component="div">{f.icon}</Typography>
+                    <Typography variant="h6" fontWeight={700}>
+                      {getFeatureText('title_key', 'title')}
+                    </Typography>
+                    <Typography color="text.secondary">
+                      {getFeatureText('description_key', 'description')}
+                    </Typography>
+                  </Stack>
+                </Grid>
+              );
+            })}
           </Grid>
         </Stack>
       );
     case 'cta':
       return (
         <Stack spacing={2} alignItems="center" textAlign="center" sx={{ p: 4, border: '1px dashed', borderColor: 'divider', borderRadius: 2 }}>
-          <Typography variant="h4" fontWeight={800}>{c.title}</Typography>
+          <Typography variant="h4" fontWeight={800}>
+            {getText('title_key', 'title')}
+          </Typography>
           <Stack direction="row" spacing={2}>
-            {c.primary?.text && (
+            {(c.primary?.text_key || c.primary?.text) && (
               <Button 
                 onClick={(e) => onCTAClick(c.primary?.href || '#', e)}
                 variant="contained"
               >
-                {c.primary.text}
+                {c.primary?.text_key ? t(c.primary.text_key, c.primary?.text) : c.primary?.text}
               </Button>
             )}
-            {c.secondary?.text && (
+            {(c.secondary?.text_key || c.secondary?.text) && (
               <Button 
                 onClick={(e) => onCTAClick(c.secondary?.href || '#', e)}
                 variant="outlined"
               >
-                {c.secondary.text}
+                {c.secondary?.text_key ? t(c.secondary.text_key, c.secondary?.text) : c.secondary?.text}
               </Button>
             )}
           </Stack>
